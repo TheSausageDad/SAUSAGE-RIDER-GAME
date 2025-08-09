@@ -249,15 +249,19 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     this.checkLandingOrientation()
 
     // Keep the motorcycle on screen horizontally
-    if (this.x < 50) {
+    if (this.body.position.x < 50) {
       MatterLib.Body.setPosition(this.body, { x: 50, y: this.body.position.y })
       if (this.body.velocity.x < 0) {
         MatterLib.Body.setVelocity(this.body, { x: 0, y: this.body.velocity.y })
       }
     }
 
+    // Sync container position with physics body
+    this.x = this.body.position.x
+    this.y = this.body.position.y
+    
     // Death condition: fall off bottom of screen
-    if (this.y > GameSettings.canvas.height + 100) {
+    if (this.body.position.y > GameSettings.canvas.height + 100) {
       this.triggerDeath()
     }
     
