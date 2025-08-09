@@ -158,9 +158,9 @@ export class GameScene extends Phaser.Scene {
     this.scoreManager.showGameOver()
     
     // Stop motorcycle physics with Matter.js
-    const Matter = (this.matter as any).Matter
+    const MatterLib = Phaser.Physics.Matter.Matter
     if (this.motorcycle.body) {
-      Matter.Body.setVelocity(this.motorcycle.body, { x: 0, y: this.motorcycle.body.velocity.y })
+      MatterLib.Body.setVelocity(this.motorcycle.body, { x: 0, y: this.motorcycle.body.velocity.y })
     }
   }
 
