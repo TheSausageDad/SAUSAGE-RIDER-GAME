@@ -111,13 +111,13 @@ export class GameScene extends Phaser.Scene {
       }
     })
     
-    // Handle spike damage
-    this.spikeBodies.forEach(spike => {
-      if (spike.body === bodyA || spike.body === bodyB) {
-        spike.triggerHit()
-        this.gameOver()
-      }
-    })
+    // Handle spike damage (DISABLED FOR NOW)
+    // this.spikeBodies.forEach(spike => {
+    //   if (spike.body === bodyA || spike.body === bodyB) {
+    //     spike.triggerHit()
+    //     this.gameOver()
+    //   }
+    // })
   }
 
   private setupManagers(): void {

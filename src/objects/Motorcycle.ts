@@ -245,8 +245,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     // Ground detection and landing logic
     this.updateGroundState()
 
-    // Death condition: landing upside down
-    this.checkLandingOrientation()
+    // Death condition: landing upside down (DISABLED FOR NOW)
+    // this.checkLandingOrientation()
 
     // Keep the motorcycle on screen horizontally
     if (this.body.position.x < 50) {
@@ -260,10 +260,10 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     this.x = this.body.position.x
     this.y = this.body.position.y
     
-    // Death condition: fall off bottom of screen
-    if (this.body.position.y > GameSettings.canvas.height + 100) {
-      this.triggerDeath()
-    }
+    // Death condition: fall off bottom of screen (DISABLED FOR NOW)
+    // if (this.body.position.y > GameSettings.canvas.height + 100) {
+    //   this.triggerDeath()
+    // }
     
     // Sync visual wheels with physics bodies
     this.frontWheel.x = this.frontWheelBody.position.x
