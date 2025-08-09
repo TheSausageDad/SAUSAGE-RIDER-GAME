@@ -21,7 +21,7 @@ export const GameSettings = {
     gravity: 800, // Reduced gravity for the motorcycle specifically
     flipSpeed: 360, // degrees per second
     startX: 200,
-    startY: 1400,
+    startY: 1500, // Fixed: positioned above ground (ground is at 1600)
     hillClimbPower: 2.5, // Much more power when climbing
     mass: 0.8, // Lighter mass for better acceleration
     boostPower: 3500, // Extra boost when really stuck
