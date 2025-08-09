@@ -213,14 +213,14 @@ export class Motorcycle extends Phaser.GameObjects.Container {
 
   public update(deltaTime: number): void {
     const dt = deltaTime / 1000
-    const Matter = (this.scene.matter as any).Matter
+    const MatterLib = Phaser.Physics.Matter.Matter
 
     // Calculate current slope from body rotation
     this.currentSlope = Math.sin(this.body.angle)
     
     // Maintain minimum forward velocity when on ground
     if (this.isOnGround && this.body.velocity.x < GameSettings.motorcycle.minSpeed && this.body.velocity.x > 0) {
-      Matter.Body.setVelocity(this.body, { x: GameSettings.motorcycle.minSpeed, y: this.body.velocity.y })
+      MatterLib.Body.setVelocity(this.body, { x: GameSettings.motorcycle.minSpeed, y: this.body.velocity.y })
     }
 
     // Handle flipping
@@ -250,9 +250,9 @@ export class Motorcycle extends Phaser.GameObjects.Container {
 
     // Keep the motorcycle on screen horizontally
     if (this.x < 50) {
-      Matter.Body.setPosition(this.body, { x: 50, y: this.body.position.y })
+      MatterLib.Body.setPosition(this.body, { x: 50, y: this.body.position.y })
       if (this.body.velocity.x < 0) {
-        Matter.Body.setVelocity(this.body, { x: 0, y: this.body.velocity.y })
+        MatterLib.Body.setVelocity(this.body, { x: 0, y: this.body.velocity.y })
       }
     }
 
@@ -294,7 +294,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   }
 
   private onLanding(): void {
-    const Matter = (this.scene.matter as any).Matter
+    const MatterLib = Phaser.Physics.Matter.Matter
     this.isFlipping = false
     
     // Snap rotation to nearest upright position if close enough
@@ -302,7 +302,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     const uprightTolerance = 30 // degrees
     
     if (normalizedRotation <= uprightTolerance || normalizedRotation >= (360 - uprightTolerance)) {
-      Matter.Body.setAngle(this.body, 0)
+      MatterLib.Body.setAngle(this.body, 0)
       this.currentRotation = 0
     }
 
@@ -323,7 +323,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
 
   public jump(): void {
     if (this.isOnGround) {
-      const Matter = (this.scene.matter as any).Matter
+      const MatterLib = Phaser.Physics.Matter.Matter
       
       // Add forward momentum when jumping
       const jumpPower = this.turboActive 
@@ -332,12 +332,12 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       
       // Apply upward force
       const jumpForce = jumpPower * 0.001
-      Matter.Body.applyForce(this.body, this.body.position, { x: 0, y: -jumpForce })
+      MatterLib.Body.applyForce(this.body, this.body.position, { x: 0, y: -jumpForce })
       
       // Apply forward boost
       const forwardBoost = this.turboActive ? 1.4 : 1.2
       const currentVelX = this.body.velocity.x * forwardBoost
-      Matter.Body.setVelocity(this.body, { x: currentVelX, y: this.body.velocity.y })
+      MatterLib.Body.setVelocity(this.body, { x: currentVelX, y: this.body.velocity.y })
       
       this.isOnGround = false
       this.stuckTimer = 0
