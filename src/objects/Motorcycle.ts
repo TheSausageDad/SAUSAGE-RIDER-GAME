@@ -256,9 +256,9 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       }
     }
 
-    // Sync container position with physics body
-    this.x = this.body.position.x
-    this.y = this.body.position.y
+    // Sync container position with physics body  
+    this.setPosition(this.body.position.x, this.body.position.y)
+    this.setRotation(this.body.angle)
     
     // Death condition: fall off bottom of screen (DISABLED FOR NOW)
     // if (this.body.position.y > GameSettings.canvas.height + 100) {
