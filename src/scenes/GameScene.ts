@@ -129,8 +129,12 @@ export class GameScene extends Phaser.Scene {
     this.inputManager.onInputActive = (isActive: boolean) => {
       if (this.gameState === 'playing') {
         this.motorcycle.handleInput(isActive)
-      } else if (this.gameState === 'gameOver') {
-        // Restart game on any input
+      }
+    }
+    
+    this.inputManager.onInputStart = () => {
+      if (this.gameState === 'gameOver') {
+        // Restart game on any input start
         this.restartGame()
       }
     }
