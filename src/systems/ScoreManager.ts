@@ -13,6 +13,12 @@ export class ScoreManager {
   private controlsText!: Phaser.GameObjects.Text
   private turboText!: Phaser.GameObjects.Text
   
+  // Game over screen elements
+  private gameOverElements: Phaser.GameObjects.GameObject[] = []
+  
+  // Active popup elements (score popups, trick displays)
+  private activePopups: Phaser.GameObjects.GameObject[] = []
+  
   public onSpeedChange: ((newSpeed: number) => void) | null = null
 
   constructor(scene: Phaser.Scene) {
@@ -22,7 +28,7 @@ export class ScoreManager {
   }
 
   private createUI(): void {
-    // Score display in top-left
+    // Score display in top-left - fixed to camera
     this.scoreText = this.scene.add.text(20, 20, this.getScoreDisplayText(), {
       fontSize: '28px',
       color: '#ffffff',
@@ -31,9 +37,10 @@ export class ScoreManager {
       strokeThickness: 3
     })
     this.scoreText.setDepth(1000)
+    this.scoreText.setScrollFactor(0) // Fixed to camera
 
-    // Flip counter in top-right
-    this.flipText = this.scene.add.text(GameSettings.canvas.width - 20, 20, `Flips: ${this.flips}`, {
+    // Spin counter in top-right - fixed to camera
+    this.flipText = this.scene.add.text(GameSettings.canvas.width - 20, 20, `Spins: ${this.flips}`, {
       fontSize: '24px',
       color: '#FFD700',
       fontFamily: 'Arial',
@@ -42,12 +49,13 @@ export class ScoreManager {
     })
     this.flipText.setOrigin(1, 0)
     this.flipText.setDepth(1000)
+    this.flipText.setScrollFactor(0) // Fixed to camera
     
-    // Controls hint at bottom
+    // Controls hint at bottom - fixed to camera
     this.controlsText = this.scene.add.text(
       GameSettings.canvas.width / 2,
       GameSettings.canvas.height - 60,
-      'HOLD SPACE/TAP: Accelerate | SHIFT/X: Turbo Boost',
+      'HOLD SPACE/TAP: Jump & Spin | Release to auto-correct',
       {
         fontSize: '20px',
         color: '#aaaaaa',
@@ -59,8 +67,9 @@ export class ScoreManager {
     )
     this.controlsText.setOrigin(0.5)
     this.controlsText.setDepth(1000)
+    this.controlsText.setScrollFactor(0) // Fixed to camera
     
-    // Turbo indicator (hidden by default)
+    // Turbo indicator (hidden by default) - fixed to camera
     this.turboText = this.scene.add.text(
       GameSettings.canvas.width / 2,
       100,
@@ -75,11 +84,12 @@ export class ScoreManager {
     )
     this.turboText.setOrigin(0.5)
     this.turboText.setDepth(1000)
+    this.turboText.setScrollFactor(0) // Fixed to camera
     this.turboText.setVisible(false)
   }
 
   private getScoreDisplayText(): string {
-    return `Score: ${this.score}\nTokens: ${this.tokens}`
+    return `Score: ${this.score}\nCoins: ${this.tokens}`
   }
 
   public addFlip(): void {
@@ -104,6 +114,62 @@ export class ScoreManager {
     this.showScorePopup(tokenScore, 0x00FF00, `+${tokenScore}`)
   }
 
+  public addTrickScore(totalScore: number, tricks: string[], multiplier: number): void {
+    this.score += totalScore
+    this.updateUI()
+    
+    // Create impressive trick display
+    let trickText = tricks.join(" + ")
+    if (multiplier > 1) {
+      trickText += ` x${multiplier}`
+    }
+    
+    // Show bigger popup for bigger scores - fixed to camera
+    const fontSize = Math.min(48 + (totalScore / 100), 72)
+    const popup = this.scene.add.text(
+      GameSettings.canvas.width / 2, 
+      GameSettings.canvas.height / 2 - 50, 
+      `${trickText}\n+${totalScore}`,
+      {
+        fontSize: `${fontSize}px`,
+        color: '#FFD700',
+        fontFamily: 'Arial',
+        stroke: '#FF4500',
+        strokeThickness: 4,
+        align: 'center'
+      }
+    )
+    popup.setOrigin(0.5)
+    popup.setDepth(1001)
+    popup.setScrollFactor(0) // Fixed to camera
+    
+    // Track this popup for cleanup
+    this.activePopups.push(popup)
+
+    // Epic animation for tricks
+    this.scene.tweens.add({
+      targets: popup,
+      y: popup.y - 120,
+      alpha: 0,
+      scale: 1.8,
+      duration: 2000,
+      ease: 'Power3.easeOut',
+      onComplete: () => {
+        // Remove from tracking array when destroyed
+        const index = this.activePopups.indexOf(popup)
+        if (index > -1) {
+          this.activePopups.splice(index, 1)
+        }
+        popup.destroy()
+      }
+    })
+    
+    // Screen shake for big scores
+    if (totalScore > 1000) {
+      this.scene.cameras.main.shake(200, 0.02)
+    }
+  }
+
   private showScorePopup(points: number, color: number, text: string): void {
     const popup = this.scene.add.text(
       GameSettings.canvas.width / 2, 
@@ -119,6 +185,10 @@ export class ScoreManager {
     )
     popup.setOrigin(0.5)
     popup.setDepth(1001)
+    popup.setScrollFactor(0) // Fixed to camera
+    
+    // Track this popup for cleanup
+    this.activePopups.push(popup)
 
     // Animate popup
     this.scene.tweens.add({
@@ -129,6 +199,11 @@ export class ScoreManager {
       duration: 1000,
       ease: 'Power2',
       onComplete: () => {
+        // Remove from tracking array when destroyed
+        const index = this.activePopups.indexOf(popup)
+        if (index > -1) {
+          this.activePopups.splice(index, 1)
+        }
         popup.destroy()
       }
     })
@@ -157,7 +232,7 @@ export class ScoreManager {
 
   private updateUI(): void {
     this.scoreText.setText(this.getScoreDisplayText())
-    this.flipText.setText(`Flips: ${this.flips}`)
+    this.flipText.setText(`Spins: ${this.flips}`)
   }
 
   public getCurrentSpeed(): number {
@@ -182,11 +257,21 @@ export class ScoreManager {
     this.tokens = 0
     this.gameStartTime = this.scene.time.now
     this.currentSpeed = GameSettings.level.scrollSpeed
+    
+    // Clean up game over screen
+    this.hideGameOver()
+    
+    // Clean up all floating popups (yellow score text, etc.)
+    this.clearAllPopups()
+    
     this.updateUI()
   }
 
   public showGameOver(): void {
-    // Game over screen
+    // Clear any existing game over elements first
+    this.hideGameOver()
+    
+    // Game over screen - fixed to camera
     const overlay = this.scene.add.rectangle(
       GameSettings.canvas.width / 2,
       GameSettings.canvas.height / 2,
@@ -196,6 +281,8 @@ export class ScoreManager {
       0.7
     )
     overlay.setDepth(999)
+    overlay.setScrollFactor(0) // Fixed to camera
+    this.gameOverElements.push(overlay)
 
     const gameOverText = this.scene.add.text(
       GameSettings.canvas.width / 2,
@@ -211,11 +298,13 @@ export class ScoreManager {
     )
     gameOverText.setOrigin(0.5)
     gameOverText.setDepth(1000)
+    gameOverText.setScrollFactor(0) // Fixed to camera
+    this.gameOverElements.push(gameOverText)
 
     const finalScoreText = this.scene.add.text(
       GameSettings.canvas.width / 2,
       GameSettings.canvas.height / 2 + 20,
-      `Final Score: ${this.score}\nFlips: ${this.flips}\nTokens: ${this.tokens}`,
+      `Final Score: ${this.score}\nSpins: ${this.flips}\nCoins: ${this.tokens}`,
       {
         fontSize: '32px',
         color: '#ffffff',
@@ -227,6 +316,8 @@ export class ScoreManager {
     )
     finalScoreText.setOrigin(0.5)
     finalScoreText.setDepth(1000)
+    finalScoreText.setScrollFactor(0) // Fixed to camera
+    this.gameOverElements.push(finalScoreText)
 
     const restartText = this.scene.add.text(
       GameSettings.canvas.width / 2,
@@ -242,6 +333,8 @@ export class ScoreManager {
     )
     restartText.setOrigin(0.5)
     restartText.setDepth(1000)
+    restartText.setScrollFactor(0) // Fixed to camera
+    this.gameOverElements.push(restartText)
 
     // Blinking restart text
     this.scene.tweens.add({
@@ -251,6 +344,32 @@ export class ScoreManager {
       yoyo: true,
       repeat: -1
     })
+  }
+
+  public hideGameOver(): void {
+    // Clean up all game over screen elements
+    this.gameOverElements.forEach(element => {
+      if (element && element.active) {
+        element.destroy()
+      }
+    })
+    this.gameOverElements = []
+    
+    // Kill all tweens that might be running
+    this.scene.tweens.killAll()
+  }
+
+  public clearAllPopups(): void {
+    // Clean up all active popup elements (yellow score text, etc.)
+    this.activePopups.forEach(popup => {
+      if (popup && popup.active) {
+        popup.destroy()
+      }
+    })
+    this.activePopups = []
+    
+    // Kill all tweens to prevent animations from continuing
+    this.scene.tweens.killAll()
   }
 
   public showTurbo(active: boolean): void {
@@ -271,6 +390,12 @@ export class ScoreManager {
   }
   
   public destroy(): void {
+    // Clean up game over screen first
+    this.hideGameOver()
+    
+    // Clean up all active popups
+    this.clearAllPopups()
+    
     if (this.scoreText) {
       this.scoreText.destroy()
     }

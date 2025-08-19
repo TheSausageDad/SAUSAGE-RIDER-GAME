@@ -81,6 +81,10 @@ export class MovingPlatform extends Phaser.GameObjects.Container {
   }
 
   public destroy(): void {
+    // Properly cleanup Matter.js physics body
+    if (this.body && this.scene.matter) {
+      this.scene.matter.world.remove(this.body)
+    }
     super.destroy()
   }
 }

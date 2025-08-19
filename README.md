@@ -1,19 +1,39 @@
-# Remix Game Template - Phaser.js + TypeScript
+# Alto's Odyssey Style Snowboarding Game - Phaser.js + TypeScript
 
 ## Overview
 
-This is a template for creating games for the Remix platform using TypeScript and Phaser.js. It provides a structured foundation with a mobile-optimized 5:9 aspect ratio, hot-reload development server, and the Remix SDK for building HTML5 games.
+An endless runner snowboarding game inspired by Alto's Odyssey, built for mobile devices with portrait orientation. Experience the thrill of carving through snowy mountain slopes with realistic physics, momentum-based jumps, and spectacular aerial tricks.
 
-## Features
+## Game Features
 
-- 📱 Mobile-first design with **5:9 aspect ratio** (optimized for vertical mobile screens)
-- 🎮 Phaser.js game framework integration (loaded via CDN)
-- 🔧 TypeScript support for type-safe development
-- 🔄 Hot-reload development server with QR code for mobile testing
-- 📦 Optimized build process for Remix platform
-- 🏗️ Organized project structure for game development
-- 🎨 Pre-configured game scene with bouncing balls demo
-- 🛡️ Safe setup script with protection against accidental data loss
+🏂 **Alto's Odyssey Style Gameplay**
+- Endless runner snowboarding through procedurally generated terrain
+- Realistic momentum-based physics system
+- Smooth slope following with natural gravity and momentum
+
+❄️ **Winter Mountain Environment**
+- Beautiful snow-capped mountain backgrounds with layered depth
+- Snowy terrain with varied slopes, hills, valleys, and big jumps
+- Winter atmosphere with snow clouds and crisp blue skies
+
+🎯 **Advanced Controls & Physics**
+- Touch/tap to jump and perform aerial spins (360° rotations)
+- Speed builds naturally downhill, momentum launches on ramps
+- Auto-correction system prevents crashes from bad landings
+- Enhanced uphill jump system with momentum bonuses
+
+🎮 **Mobile-Optimized Design**
+- Portrait 1:2 aspect ratio (400x800) perfect for mobile devices
+- Responsive touch controls with visual feedback
+- Camera follows player with optimal viewing angle
+
+## Technical Features
+
+- 🔧 **TypeScript** - Type-safe development with modern tooling
+- 🎮 **Phaser.js** - Powerful HTML5 game framework with Matter.js physics
+- 📱 **Mobile-First** - Optimized for portrait mobile gameplay
+- 🔄 **Hot-Reload** - Development server with QR code for mobile testing
+- 📦 **Single-File Build** - Optimized for Remix platform deployment
 
 ## What You Need Before Starting
 
@@ -76,7 +96,7 @@ npm run dev
 - Development server starts at `http://localhost:3000`
 - A QR code appears in your terminal for mobile testing
 - The browser opens automatically
-- You'll see "Remix Server Test" with colorful bouncing balls
+- You'll see the snowboarding game with a winter mountain environment
 - File changes trigger automatic browser refresh
 
 ### Step 4: Test on Your Phone
@@ -149,10 +169,16 @@ rm -rf src_prev
 
 ## Customizing Your Game
 
-### Remove the Demo Content
-When you're ready to build your actual game, ask an AI assistant (like Claude Code):
+### Gameplay Instructions
+**Controls:**
+- **Hold Space/Tap Screen**: Jump and perform aerial spins
+- **Release**: Auto-correct rotation to land safely
 
-> "Please remove the bouncing balls demo and give me a blank game scene to start building my game."
+**Tips for High Scores:**
+- Build speed by going downhill before hitting jumps
+- Use momentum to launch higher off ramps and hills  
+- Perform 360° spins in the air for bonus points
+- Land safely to maintain your combo multiplier
 
 ### Project Structure Explained
 ```
@@ -163,9 +189,16 @@ your-game/
 ├── src/                   # Your game code goes here
 │   ├── main.ts           # Game entry point - creates Phaser game
 │   ├── config/
-│   │   └── GameSettings.ts # Game settings (canvas size, debug mode, etc.)
+│   │   └── GameSettings.ts # Game settings (portrait 400x800, physics, etc.)
+│   ├── objects/
+│   │   └── Motorcycle.ts  # Snowboarder player character with physics
 │   ├── scenes/
-│   │   └── GameScene.ts   # Main game scene (currently has demo balls)
+│   │   └── GameScene.ts   # Main game scene with winter mountain background
+│   ├── systems/
+│   │   ├── LevelGenerator.ts    # Infinite terrain generation
+│   │   ├── InputManager.ts      # Touch/keyboard input handling
+│   │   ├── ScoreManager.ts      # UI and scoring system
+│   │   └── DynamicTerrain.ts    # Terrain physics and generation
 │   ├── utils/
 │   │   └── RemixUtils.ts  # Remix platform integration
 │   └── types.ts          # TypeScript type definitions
@@ -174,10 +207,13 @@ your-game/
 ```
 
 ### Key Files to Understand:
-- **`src/main.ts`**: Creates the Phaser game with your settings
-- **`src/scenes/GameScene.ts`**: Where your game logic lives
-- **`src/config/GameSettings.ts`**: Adjust canvas size, debug mode, etc.
-- **`index.html`**: Loads Phaser and Remix SDK, sets up the game container
+- **`src/main.ts`**: Creates the Phaser game with Matter.js physics engine
+- **`src/scenes/GameScene.ts`**: Main game scene with winter background and systems integration
+- **`src/objects/Motorcycle.ts`**: Snowboarder character with realistic physics, jumping, and spin mechanics
+- **`src/systems/LevelGenerator.ts`**: Generates infinite snowy terrain with varied slopes and jumps
+- **`src/systems/ScoreManager.ts`**: Handles UI, scoring, and trick combo system
+- **`src/config/GameSettings.ts`**: Game settings (400x800 portrait, physics parameters, etc.)
+- **`index.html`**: Loads Phaser and Remix SDK, sets up mobile-optimized container
 
 ## Available Commands
 

@@ -1,408 +1,771 @@
 import GameSettings from "../config/GameSettings"
+import { ProjectilePhysics, TrajectoryPoint } from "../systems/ProjectilePhysics"
+import { DynamicTerrain } from "../systems/DynamicTerrain"
+import { LevelGenerator } from "../systems/LevelGenerator"
 
 export class Motorcycle extends Phaser.GameObjects.Container {
-  public body!: any // Matter body
-  private frontWheel!: Phaser.GameObjects.Arc
-  private backWheel!: Phaser.GameObjects.Arc
-  public frontWheelBody!: any // Matter body
-  public backWheelBody!: any // Matter body
-  public chassisBody!: any // Matter body
-  private frontConstraint!: any // Matter constraint
-  private backConstraint!: any // Matter constraint
+  public body!: MatterJS.Body // Physics body for collision detection
+  private terrain!: DynamicTerrain
+  public levelGenerator!: LevelGenerator
   private bikeSprite!: Phaser.GameObjects.Rectangle
   private riderSprite!: Phaser.GameObjects.Rectangle
+  private frontWheel!: Phaser.GameObjects.Arc
+  private backWheel!: Phaser.GameObjects.Arc
   
-  private isOnGround: boolean = false
+  // Alto's Odyssey style physics
+  private velocity: Phaser.Math.Vector2 = new Phaser.Math.Vector2(0, 0)
+  private baseSpeed: number = 400 // Faster but reasonable base speed on flat ground
+  private maxSpeed: number = GameSettings.motorcycle.maxSpeed // Use GameSettings max speed
+  private minSpeed: number = GameSettings.motorcycle.minSpeed // Use GameSettings min speed
+  private gravity: number = GameSettings.motorcycle.gravity // Use GameSettings gravity
+  private jumpPower: number = GameSettings.motorcycle.jumpPower // Use GameSettings jump power
+  private slopeInfluence: number = 1.2 // Increased slope influence for more dramatic speed changes
+  
+  // Game state
+  public isOnGround: boolean = true
   private isFlipping: boolean = false
-  private flipDirection: number = 0 // 1 for clockwise, -1 for counter-clockwise
-  private currentRotation: number = 0
   private completedFlips: number = 0
-  private wasInAir: boolean = false
-  private currentSlope: number = 0 // Track current slope angle
-  private stuckTimer: number = 0 // Track if stuck on hill
-  private turboActive: boolean = false // Turbo boost state
-  private turboMultiplier: number = 1.0 // Current turbo multiplier
+  private flipRotation: number = 0
+  private airTime: number = 0 // Time in air for scoring
+  private comboMultiplier: number = 1
+  private currentTricks: string[] = [] // Track tricks in current combo
+  
+  // Crash detection
+  public onCrash: (() => void) | null = null
+  
+  // Continuous flip controls
+  private isInputHeld: boolean = false
+  private flipSpeed: number = 360 // degrees per second when flipping (reduced for slower rotation)
+  private autoCorrectSpeed: number = 360 // degrees per second for auto-correction
+  private isAutoCorreting: boolean = false
+  
+  // Momentum-based launching
+  private previousTerrainAngle: number = 0
+  private launchThreshold: number = -0.5 // Minimum upward angle to trigger launch (radians)
+  private momentumMultiplier: number = 0.6 // How much speed converts to launch power
   
   public onFlipComplete: ((flips: number) => void) | null = null
-  public onDeath: (() => void) | null = null
+  public onLanding: (() => void) | null = null
+  public onTrickComplete: ((tricks: string[], multiplier: number, airTime: number) => void) | null = null
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
+  constructor(scene: Phaser.Scene, x: number, y: number, terrain: DynamicTerrain, levelGenerator?: LevelGenerator) {
     super(scene, x, y)
     
-    this.createSprites()
+    this.terrain = terrain
+    this.levelGenerator = levelGenerator!
     
+    // Add to scene first so container position is set
     scene.add.existing(this)
-    // Don't use arcade physics - we'll use Matter physics instead
     
+    // Set depth to ensure motorcycle is visible above other objects
+    this.setDepth(100)
+    
+    this.createSprites()
     this.setupPhysics()
+    
+    // Position motorcycle on ground initially
+    this.positionOnGround()
   }
 
   private createSprites(): void {
-    // Motorcycle body (main rectangle)
-    this.bikeSprite = this.scene.add.rectangle(0, 0, GameSettings.motorcycle.width, GameSettings.motorcycle.height, 0x333333)
-    this.bikeSprite.setStrokeStyle(2, 0xffffff)
-    this.add(this.bikeSprite)
-
-    // Rider (smaller rectangle on top)
-    this.riderSprite = this.scene.add.rectangle(0, -20, 20, 30, 0x666666)
-    this.riderSprite.setStrokeStyle(1, 0xffffff)
+    console.log(`Creating sausage character at position: ${this.x}, ${this.y}`)
+    
+    // Use the sausage character image
+    this.riderSprite = this.scene.add.image(-10, 80, 'player') as any
+    this.riderSprite.setScale(0.18) // Increased scale for bigger normal image
+    this.riderSprite.setOrigin(0.5, 1.0) // Center horizontally, bottom of image at ground level
     this.add(this.riderSprite)
 
-    // Create wheels as separate game objects for Matter physics
-    this.frontWheel = this.scene.add.circle(this.x - 20, this.y + 15, 8, 0x222222)
-    this.frontWheel.setStrokeStyle(1, 0xffffff)
+    // Use invisible rectangle for bikeSprite compatibility
+    this.bikeSprite = this.scene.add.rectangle(0, 0, 1, 1, 0x000000, 0)
+    this.bikeSprite.setVisible(false)
+    this.add(this.bikeSprite)
+
+    // Store references to wheels as dummy objects for compatibility
+    this.frontWheel = this.scene.add.circle(0, 0, 1, 0x000000, 0)
+    this.frontWheel.setVisible(false)
+    this.backWheel = this.scene.add.circle(0, 0, 1, 0x000000, 0)
+    this.backWheel.setVisible(false)
     
-    this.backWheel = this.scene.add.circle(this.x + 20, this.y + 15, 8, 0x222222)
-    this.backWheel.setStrokeStyle(1, 0xffffff)
+    // Make sure container is visible
+    this.setAlpha(1)
+    this.setVisible(true)
+    this.setDepth(100)
+    
+    console.log(`Sausage character created`)
   }
 
   private setupPhysics(): void {
-    // Access Matter.js through Phaser's global
-    const MatterLib = Phaser.Physics.Matter.Matter
-    
-    // Create chassis (main body)
-    this.chassisBody = this.scene.matter.add.rectangle(
-      this.x, this.y, 
-      GameSettings.motorcycle.width, GameSettings.motorcycle.height,
+    // Create a sensor physics body for collision detection only (doesn't affect movement)
+    this.body = this.scene.matter.add.circle(
+      this.x, this.y, 20,
       {
-        mass: GameSettings.motorcycle.mass * 0.7, // Most weight on chassis
-        friction: 0.3,
-        frictionAir: 0.02,
-        restitution: 0.1
+        isSensor: true, // Doesn't collide physically, just detects overlaps
+        label: 'player',
+        isStatic: false // Allow manual position updates
       }
     )
     
-    // Create front wheel
-    this.frontWheelBody = this.scene.matter.add.circle(
-      this.x - 20, this.y + 15, 8,
-      {
-        mass: GameSettings.motorcycle.mass * 0.15,
-        friction: 1.5, // High friction for traction
-        frictionAir: 0.05,
-        restitution: 0.3
+    // Store reference to this motorcycle on the body for collision detection
+    this.body.gameObject = this
+    
+    // DO NOT link with matter.add.gameObject - we want to keep custom physics
+    console.log("Motorcycle collision body created (no physics control)")
+  }
+
+  private positionOnGround(): void {
+    // Wait a frame for terrain to be initialized, then position snowboarder
+    this.scene.time.delayedCall(100, () => {
+      let terrainHeight = GameSettings.level.groundY
+      
+      if (this.levelGenerator) {
+        terrainHeight = this.getTerrainHeightFromChunks(this.x)
+      } else {
+        terrainHeight = this.terrain.getHeightAtX(this.x)
       }
-    )
-    
-    // Create back wheel
-    this.backWheelBody = this.scene.matter.add.circle(
-      this.x + 20, this.y + 15, 8,
-      {
-        mass: GameSettings.motorcycle.mass * 0.15,
-        friction: 1.8, // Higher friction on back wheel (driving wheel)
-        frictionAir: 0.05,
-        restitution: 0.3
-      }
-    )
-    
-    // Create constraints to connect wheels to chassis
-    this.frontConstraint = this.scene.matter.add.constraint(
-      this.chassisBody,
-      this.frontWheelBody,
-      0, // length (0 = current distance)
-      0.7, // stiffness
-      {
-        pointA: { x: -20, y: 15 },
-        pointB: { x: 0, y: 0 },
-        damping: 0.1
-      }
-    )
-    
-    this.backConstraint = this.scene.matter.add.constraint(
-      this.chassisBody,
-      this.backWheelBody,
-      0, // length
-      0.8, // stiffer back suspension
-      {
-        pointA: { x: 20, y: 15 },
-        pointB: { x: 0, y: 0 },
-        damping: 0.15
-      }
-    )
-    
-    // Set the main body for the container
-    this.body = this.chassisBody
-    
-    // Link game objects to physics bodies
-    this.scene.matter.add.gameObject(this.frontWheel, this.frontWheelBody)
-    this.scene.matter.add.gameObject(this.backWheel, this.backWheelBody)
-    this.scene.matter.add.gameObject(this, this.chassisBody)
+      
+      this.y = terrainHeight - 20 // Position on terrain (matching collision detection)
+      this.isOnGround = true // Make sure we start on ground
+      this.velocity.y = 0 // No initial vertical velocity
+      console.log(`Snowboarder positioned on ground at: ${this.x}, ${this.y}, terrain height: ${terrainHeight}`)
+    })
   }
 
   public handleInput(isPressed: boolean): void {
-    const MatterLib = Phaser.Physics.Matter.Matter
+    const wasInputHeld = this.isInputHeld
+    this.isInputHeld = isPressed
     
-    if (this.isOnGround) {
-      // On ground: accelerate or coast
+    // Handle initial press for jumping
+    if (isPressed && !wasInputHeld && this.isOnGround) {
+      // First press while on ground = jump
+      this.jump()
+      return
+    }
+    
+    // Handle continuous flipping only when truly airborne
+    if (this.isTrulyAirborne()) {
       if (isPressed) {
-        const currentSpeed = Math.abs(this.body.velocity.x)
-        let torque = GameSettings.motorcycle.acceleration * 0.001 // Convert to torque
-        
-        // Detect slope based on velocity and rotation
-        const isGoingUphill = this.body.velocity.y < -30 || this.currentSlope < -0.1
-        const isReallyStuck = currentSpeed < GameSettings.motorcycle.minSpeed && isGoingUphill
-        
-        // Apply progressive power boost based on conditions
-        if (isReallyStuck) {
-          torque = GameSettings.motorcycle.boostPower * 0.001
-          this.stuckTimer++
-          
-          // Add vertical boost to help climb
-          if (this.stuckTimer > 30) {
-            MatterLib.Body.applyForce(this.body, this.body.position, { x: 0, y: -0.05 })
-          }
-        } else if (isGoingUphill) {
-          torque *= GameSettings.motorcycle.hillClimbPower
-          this.stuckTimer = 0
-        } else {
-          this.stuckTimer = 0
+        if (!this.isFlipping) {
+          // Start flipping - change to flipping image and adjust position/scale
+          (this.riderSprite as any).setTexture('player_flipping');
+          this.riderSprite.setPosition(0, 60); // Move down closer to ground
+          this.riderSprite.setScale(0.2); // Slightly larger scale for flipping image
         }
-        
-        // Apply torque multiplier for better grip
-        torque *= GameSettings.motorcycle.torqueMultiplier
-        
-        // Apply turbo boost if active
-        if (this.turboActive) {
-          torque *= 2.0
-          this.turboMultiplier = 2.0
-        } else {
-          this.turboMultiplier = 1.0
-        }
-        
-        // Always maintain minimum speed
-        if (currentSpeed < GameSettings.motorcycle.minSpeed) {
-          torque *= 1.5
-        }
-        
-        // Apply torque to back wheel for driving
-        MatterLib.Body.setAngularVelocity(this.backWheelBody, torque * 10)
-        
-        // Apply forward force to chassis
-        const forceDirection = this.body.angle
-        const force = {
-          x: Math.cos(forceDirection) * torque * 5,
-          y: Math.sin(forceDirection) * torque * 5
-        }
-        MatterLib.Body.applyForce(this.body, this.body.position, force)
-        
+        this.isFlipping = true
+        this.isAutoCorreting = false
       } else {
-        // When not pressing, apply small braking torque
-        MatterLib.Body.setAngularVelocity(this.backWheelBody, this.backWheelBody.angularVelocity * 0.95)
-        this.stuckTimer = 0
+        if (this.isFlipping) {
+          // Stop flipping - change back to normal image and restore position/scale
+          (this.riderSprite as any).setTexture('player');
+          this.riderSprite.setPosition(-10, 80); // Restore original position
+          this.riderSprite.setScale(0.18); // Restore original scale
+        }
+        this.isFlipping = false
+        // Check if we need auto-correction
+        this.checkAutoCorrection()
       }
     } else {
-      // In air: flip control
-      if (isPressed && !this.isFlipping) {
-        this.startFlip()
+      // On ground or touching terrain - no flipping allowed
+      if (this.isFlipping) {
+        // Stop flipping - change back to normal image and restore position/scale
+        (this.riderSprite as any).setTexture('player');
+        this.riderSprite.setPosition(-10, 80); // Restore original position
+        this.riderSprite.setScale(0.18); // Restore original scale
       }
-      
-      // Better air control
-      if (isPressed) {
-        const airForce = GameSettings.motorcycle.acceleration * GameSettings.motorcycle.airControl * 0.0001
-        MatterLib.Body.applyForce(this.body, this.body.position, { x: airForce, y: 0 })
-      }
-      
-      this.stuckTimer = 0
-    }
-  }
-
-  private startFlip(): void {
-    this.isFlipping = true
-    this.flipDirection = this.body.velocity.x >= 0 ? 1 : -1
-    this.currentRotation = 0
-  }
-
-  public update(deltaTime: number): void {
-    const dt = deltaTime / 1000
-    const MatterLib = Phaser.Physics.Matter.Matter
-
-    // Calculate current slope from body rotation
-    this.currentSlope = Math.sin(this.body.angle)
-    
-    // Maintain minimum forward velocity when on ground
-    if (this.isOnGround && this.body.velocity.x < GameSettings.motorcycle.minSpeed && this.body.velocity.x > 0) {
-      MatterLib.Body.setVelocity(this.body, { x: GameSettings.motorcycle.minSpeed, y: this.body.velocity.y })
-    }
-
-    // Handle flipping
-    if (this.isFlipping) {
-      const flipTorque = GameSettings.motorcycle.flipSpeed * this.flipDirection * 0.01
-      const MatterLib = Phaser.Physics.Matter.Matter
-      MatterLib.Body.setAngularVelocity(this.body, flipTorque)
-      
-      this.currentRotation += GameSettings.motorcycle.flipSpeed * this.flipDirection * dt
-
-      // Check for completed flip
-      if (Math.abs(this.currentRotation) >= 360) {
-        this.completedFlips++
-        this.currentRotation = this.currentRotation % 360
-        
-        if (this.onFlipComplete) {
-          this.onFlipComplete(1)
-        }
-      }
-    }
-
-    // Ground detection and landing logic
-    this.updateGroundState()
-
-    // Death condition: landing upside down (DISABLED FOR NOW)
-    // this.checkLandingOrientation()
-
-    // Keep the motorcycle on screen horizontally
-    if (this.body.position.x < 50) {
-      MatterLib.Body.setPosition(this.body, { x: 50, y: this.body.position.y })
-      if (this.body.velocity.x < 0) {
-        MatterLib.Body.setVelocity(this.body, { x: 0, y: this.body.velocity.y })
-      }
-    }
-
-    // Sync container position with physics body  
-    this.setPosition(this.body.position.x, this.body.position.y)
-    this.setRotation(this.body.angle)
-    
-    // Death condition: fall off bottom of screen (DISABLED FOR NOW)
-    // if (this.body.position.y > GameSettings.canvas.height + 100) {
-    //   this.triggerDeath()
-    // }
-    
-    // Sync visual wheels with physics bodies
-    this.frontWheel.x = this.frontWheelBody.position.x
-    this.frontWheel.y = this.frontWheelBody.position.y
-    this.frontWheel.rotation = this.frontWheelBody.angle
-    
-    this.backWheel.x = this.backWheelBody.position.x
-    this.backWheel.y = this.backWheelBody.position.y
-    this.backWheel.rotation = this.backWheelBody.angle
-  }
-
-  private updateGroundState(): void {
-    const wasOnGround = this.isOnGround
-    
-    // Check if any wheel is touching ground by checking their Y velocity
-    // In Matter.js, we need to use collision detection or body position checking
-    const groundThreshold = 5 // pixels per frame movement threshold
-    const frontWheelGrounded = Math.abs(this.frontWheelBody.velocity.y) < groundThreshold
-    const backWheelGrounded = Math.abs(this.backWheelBody.velocity.y) < groundThreshold
-    
-    this.isOnGround = frontWheelGrounded || backWheelGrounded
-
-    // Just landed
-    if (!wasOnGround && this.isOnGround) {
-      this.onLanding()
-    }
-
-    // Just took off
-    if (wasOnGround && !this.isOnGround) {
-      this.wasInAir = true
-    }
-  }
-
-  private onLanding(): void {
-    const MatterLib = Phaser.Physics.Matter.Matter
-    this.isFlipping = false
-    
-    // Snap rotation to nearest upright position if close enough
-    const normalizedRotation = ((this.body.angle * 180 / Math.PI) % 360 + 360) % 360
-    const uprightTolerance = 30 // degrees
-    
-    if (normalizedRotation <= uprightTolerance || normalizedRotation >= (360 - uprightTolerance)) {
-      MatterLib.Body.setAngle(this.body, 0)
-      this.currentRotation = 0
-    }
-
-    this.wasInAir = false
-  }
-
-  private checkLandingOrientation(): void {
-    if (this.isOnGround && this.wasInAir) {
-      const normalizedRotation = ((this.body.angle * 180 / Math.PI) % 360 + 360) % 360
-      const uprightTolerance = 45 // degrees
-      
-      // Check if landed upside down (around 180 degrees)
-      if (normalizedRotation > (180 - uprightTolerance) && normalizedRotation < (180 + uprightTolerance)) {
-        this.triggerDeath()
-      }
+      this.isFlipping = false
+      this.isAutoCorreting = false
     }
   }
 
   public jump(): void {
-    if (this.isOnGround) {
-      const MatterLib = Phaser.Physics.Matter.Matter
+    // Check if motorcycle is close enough to terrain to jump (more lenient than isOnGround)
+    if (this.canJumpFromGround()) {
+      // Jump perpendicular to the terrain for realistic physics
+      let terrainAngle = 0
+      if (this.levelGenerator) {
+        terrainAngle = this.getTerrainAngleFromChunks(this.x)
+      } else {
+        terrainAngle = this.terrain.getSlopeAngleAtX(this.x)
+      }
       
-      // Add forward momentum when jumping
-      const jumpPower = this.turboActive 
-        ? GameSettings.motorcycle.jumpPower * 1.3 
-        : GameSettings.motorcycle.jumpPower
+      // Calculate base jump power with moderate momentum and slope bonuses
+      let jumpPower = this.jumpPower
       
-      // Apply upward force
-      const jumpForce = jumpPower * 0.001
-      MatterLib.Body.applyForce(this.body, this.body.position, { x: 0, y: -jumpForce })
+      // Momentum bonus - faster speed = slightly higher jumps (REDUCED)
+      const speedBonus = Math.max(0, (this.velocity.x - this.baseSpeed) / this.baseSpeed)
+      jumpPower += speedBonus * 100 // Reduced from 300 to 100
       
-      // Apply forward boost
-      const forwardBoost = this.turboActive ? 1.4 : 1.2
-      const currentVelX = this.body.velocity.x * forwardBoost
-      MatterLib.Body.setVelocity(this.body, { x: currentVelX, y: this.body.velocity.y })
+      // Slope-based jump bonuses (REDUCED)
+      const slopeStrength = Math.abs(terrainAngle)
+      
+      if (terrainAngle > 0.1) { // Downward slope = hill top or ramp
+        jumpPower += 50 // Reduced from 150 to 50
+        console.log("Hill top jump bonus!")
+      } else if (terrainAngle < -0.1) { // Upward slope = uphill launch
+        // Uphill launches get moderate power with momentum (REDUCED)
+        const uphillBonus = slopeStrength * 120 // Reduced from 400 to 120
+        const momentumBonus = this.velocity.x > this.baseSpeed * 1.3 ? 60 : 0 // Reduced from 200 to 60
+        jumpPower += uphillBonus + momentumBonus
+        console.log(`Uphill launch! Slope bonus: ${uphillBonus.toFixed(0)}, Momentum bonus: ${momentumBonus}`)
+      }
+      
+      // Small bonus for steep slopes with high speed (REDUCED)
+      if (slopeStrength > 0.3 && this.velocity.x > this.baseSpeed * 1.5) {
+        jumpPower += 80 // Reduced from 250 to 80
+        console.log("Steep slope + high speed bonus!")
+      }
+      
+      // Cap maximum jump power to prevent flying off screen
+      jumpPower = Math.min(jumpPower, 550) // Balanced maximum jump power limit
+      
+      // Calculate jump vector with forward bias
+      const perpendicularAngle = terrainAngle - Math.PI/2 // 90 degrees from terrain
+      const forwardAngle = -Math.PI/4 // Always 45 degrees up-forward
+      
+      // Blend perpendicular jump with forward jump based on terrain steepness
+      const forwardBias = Math.min(Math.abs(terrainAngle) * 1.5, 0.4) // Reduced forward bias and max
+      const finalAngle = perpendicularAngle * (1 - forwardBias) + forwardAngle * forwardBias
+      
+      const jumpVelocityX = Math.cos(finalAngle) * jumpPower
+      const jumpVelocityY = Math.sin(finalAngle) * jumpPower
+      
+      // Ensure minimum forward velocity (reduced)
+      const minForwardVelocity = jumpPower * 0.15 // Reduced minimum forward component
+      const finalVelocityX = Math.max(jumpVelocityX, minForwardVelocity)
+      
+      // Add jump velocity to current velocity (reduced power)
+      this.velocity.x += finalVelocityX * 0.25 // Reduced forward boost
+      this.velocity.y += jumpVelocityY
       
       this.isOnGround = false
-      this.stuckTimer = 0
+      console.log(`Snowboarder jumped! Power: ${jumpPower.toFixed(0)}, Speed: ${this.velocity.x.toFixed(0)}`)
     }
   }
-  
-  public setTurbo(active: boolean): void {
-    this.turboActive = active
+
+  private isTrulyAirborne(): boolean {
+    // Check if snowboarder is actually clear of terrain (not just flagged as off-ground)
+    let terrainHeight = GameSettings.level.groundY
     
-    // Visual feedback for turbo
-    if (active) {
-      this.bikeSprite.setFillStyle(0xFF3333) // Red when turbo
+    if (this.levelGenerator) {
+      terrainHeight = this.getTerrainHeightFromChunks(this.x)
     } else {
-      this.bikeSprite.setFillStyle(0x333333) // Normal color
+      terrainHeight = this.terrain.getHeightAtX(this.x)
+    }
+    
+    const snowboarderBottom = this.y + 20 // Account for snowboarder height from center
+    const clearanceThreshold = 15 // Must be at least 15 pixels clear of terrain
+    
+    return snowboarderBottom < (terrainHeight - clearanceThreshold)
+  }
+
+  private groundCheckStability: number = 0 // Track ground stability
+
+  private canJumpFromGround(): boolean {
+    // More lenient check for jumping - allows jumping when close to terrain
+    let terrainHeight = GameSettings.level.groundY
+    
+    if (this.levelGenerator) {
+      terrainHeight = this.getTerrainHeightFromChunks(this.x)
+    } else {
+      terrainHeight = this.terrain.getHeightAtX(this.x)
+    }
+    
+    const motorcycleBottom = this.y + 20 // Account for motorcycle height from center
+    let jumpThreshold = 40 // Increased base jump threshold for stability
+    
+    // Make jumping much more forgiving with high speed
+    if (this.velocity.x > this.baseSpeed * 1.2) {
+      // High speed = more forgiving jump
+      jumpThreshold = 60
+    }
+    
+    // Get terrain angle to detect slopes
+    const terrainAngle = this.levelGenerator ? 
+      this.getTerrainAngleFromChunks(this.x) : 
+      this.terrain.getSlopeAngleAtX(this.x)
+    
+    // Make jumping extra forgiving on ANY slope (uphill or downhill)
+    const slopeStrength = Math.abs(terrainAngle)
+    if (slopeStrength > 0.1) { // Any significant slope
+      jumpThreshold = 80 // Extra forgiving on all slopes
+      
+      // Even more forgiving on steep slopes
+      if (slopeStrength > 0.3) {
+        jumpThreshold = 100 // Very forgiving on steep slopes
+      }
+    }
+    
+    // Special case: if going uphill with good speed, be extra lenient
+    if (terrainAngle < -0.2 && this.velocity.x > this.baseSpeed * 1.3) {
+      jumpThreshold = 120 // Super forgiving for uphill momentum jumps
+    }
+    
+    return motorcycleBottom >= (terrainHeight - jumpThreshold)
+  }
+
+  private checkForCrash(): boolean {
+    // Check if snowboarder is landing head-first (much more forgiving)
+    const normalizedRotation = ((this.rotation % (Math.PI * 2)) + (Math.PI * 2)) % (Math.PI * 2)
+    
+    // Only crash if landing nearly upside down (head touching ground)
+    // Safe zone: everything except the narrow "head-first" range around 180 degrees (π)
+    const headFirstRange = Math.PI / 3 // 60 degrees range around upside down (±30°)
+    const upsideDown = Math.PI // 180 degrees
+    
+    // Check if we're in the dangerous head-first landing zone
+    const distanceFromUpsideDown = Math.min(
+      Math.abs(normalizedRotation - upsideDown),
+      Math.abs(normalizedRotation - (upsideDown + Math.PI * 2)),
+      Math.abs(normalizedRotation - (upsideDown - Math.PI * 2))
+    )
+    
+    // Only crash if landing very close to upside down (head-first)
+    if (distanceFromUpsideDown < headFirstRange / 2) {
+      // Head is touching ground - crash!
+      return true
+    }
+    
+    return false // Safe landing - can land on side, back, etc.
+  }
+
+  private checkAutoCorrection(): void {
+    if (this.isTrulyAirborne()) {
+      // Check if motorcycle is upside down (rotation between 90 and 270 degrees)
+      const normalizedRotation = ((this.rotation % (Math.PI * 2)) + (Math.PI * 2)) % (Math.PI * 2)
+      const isUpsideDown = normalizedRotation > Math.PI/2 && normalizedRotation < (Math.PI * 3/2)
+      
+      if (isUpsideDown) {
+        this.isAutoCorreting = true
+        console.log("Auto-correcting snowboarder rotation")
+      }
     }
   }
 
-  public getVelocity(): Phaser.Math.Vector2 {
-    return new Phaser.Math.Vector2(this.body.velocity.x, this.body.velocity.y)
-  }
+  public update(deltaTime: number): void {
+    const dt = deltaTime / 1000
 
-  public setPosition(x: number, y: number): this {
-    super.setPosition(x, y)
-    return this
-  }
+    // Alto's Odyssey style movement
+    this.updateVelocityBasedOnTerrain(dt)
+    
+    // Apply movement
+    this.x += this.velocity.x * dt
+    this.y += this.velocity.y * dt
+    
+    // No height limit - allow unlimited jumping
 
-  private triggerDeath(): void {
-    if (this.onDeath) {
-      this.onDeath()
+    // Apply gravity when in air and track air time
+    if (!this.isOnGround) {
+      this.velocity.y += this.gravity * dt
+      this.airTime += dt
+    } else {
+      // Reset air time when on ground
+      if (this.airTime > 0) {
+        this.airTime = 0
+      }
     }
+
+    // Handle continuous flipping and auto-correction
+    if (this.isTrulyAirborne()) {
+      if (this.isFlipping) {
+        // Continuous flipping while input is held (backflips - counter-clockwise)
+        const rotationChange = this.flipSpeed * dt * (Math.PI / 180) // Convert to radians
+        this.rotation -= rotationChange // Changed to negative for backflips
+        
+        // Track completed flips for scoring
+        this.flipRotation += this.flipSpeed * dt
+        
+        while (this.flipRotation >= 360) {
+          this.completedFlips++
+          this.currentTricks.push("360 Spin")
+          this.flipRotation -= 360
+          
+          if (this.onFlipComplete) {
+            this.onFlipComplete(1)
+          }
+        }
+      } else if (this.isAutoCorreting) {
+        // Auto-correct rotation to upright position
+        const targetRotation = 0 // Upright
+        const currentRotation = this.rotation
+        
+        // Find shortest rotation direction
+        let rotationDiff = targetRotation - currentRotation
+        
+        // Normalize to [-π, π]
+        while (rotationDiff > Math.PI) rotationDiff -= 2 * Math.PI
+        while (rotationDiff < -Math.PI) rotationDiff += 2 * Math.PI
+        
+        // Apply auto-correction rotation
+        const correctionSpeed = this.autoCorrectSpeed * dt * (Math.PI / 180)
+        
+        if (Math.abs(rotationDiff) < correctionSpeed) {
+          // Close enough, snap to upright
+          this.rotation = targetRotation
+          this.isAutoCorreting = false
+          this.flipRotation = 0
+        } else {
+          // Continue correcting
+          this.rotation += Math.sign(rotationDiff) * correctionSpeed
+        }
+      }
+    }
+
+    // Ground collision detection
+    this.checkGroundCollision()
+
+    // Update terrain rotation when on ground (for continuous slope following)
+    if (this.isOnGround && !this.isFlipping) {
+      this.updateTerrainRotation(dt)
+    }
+
+    // Update wheel rotation for visual effect
+    this.updateWheelRotation(dt)
+    
+    // Update physics body position to match visual position
+    this.scene.matter.body.setPosition(this.body, { x: this.x, y: this.y })
+  }
+
+  private updateVelocityBasedOnTerrain(dt: number): void {
+    if (this.isOnGround) {
+      // Get terrain angle at current position
+      let terrainAngle = 0
+      if (this.levelGenerator) {
+        terrainAngle = this.getTerrainAngleFromChunks(this.x)
+      } else {
+        terrainAngle = this.terrain.getSlopeAngleAtX(this.x)
+      }
+
+      // Convert terrain angle to speed influence (-1 = steep uphill, 1 = steep downhill)
+      const slopeInfluence = Math.sin(terrainAngle) * this.slopeInfluence
+      
+      // Enhanced downhill acceleration and much better uphill speed retention
+      let accelerationMultiplier = 4 // Faster default acceleration rate
+      let speedRetention = 1.0 // How well speed is maintained
+      
+      if (slopeInfluence > 0) {
+        // Downhill - good acceleration but not crazy
+        accelerationMultiplier = 5 + (slopeInfluence * 3) // Reasonable downhill acceleration
+        speedRetention = 1.2 // Good speed buildup but controlled
+      } else if (slopeInfluence < 0) {
+        // Uphill - much better speed retention with hill climb power
+        const hillClimbBonus = GameSettings.motorcycle.hillClimbPower * GameSettings.motorcycle.torqueMultiplier
+        accelerationMultiplier = 3 + (hillClimbBonus * 0.05) // Use hill climb power for uphill acceleration
+        speedRetention = 1.0 + (hillClimbBonus * 0.03) // Good uphill speed retention
+      }
+      
+      // Calculate target speed based on slope with enhanced downhill benefits
+      let targetSpeed = this.baseSpeed + (slopeInfluence * (this.maxSpeed - this.baseSpeed) * speedRetention)
+      
+      // For downhill, allow reasonable speed increases
+      if (slopeInfluence > 0.3) { // Steep downhill only
+        const downhillBonus = Math.min(slopeInfluence * 200, 400) // Up to 400 extra speed on very steep downhills
+        targetSpeed = Math.min(targetSpeed + downhillBonus, this.maxSpeed + 500) // Reasonable top speed increases
+      }
+      
+      // Balanced speed limits
+      const maxSpeedLimit = slopeInfluence > 0 ? this.maxSpeed + 500 : this.maxSpeed + 100 // More reasonable limits
+      const clampedSpeed = Phaser.Math.Clamp(targetSpeed, this.minSpeed, maxSpeedLimit)
+      
+      // Apply acceleration with terrain-specific multiplier
+      const speedDiff = clampedSpeed - this.velocity.x
+      this.velocity.x += speedDiff * accelerationMultiplier * dt
+      
+      // Keep vertical velocity aligned with terrain when on ground only for slopes
+      if (Math.abs(terrainAngle) > 0.01) { // Only adjust for actual slopes
+        this.velocity.y = this.velocity.x * Math.tan(terrainAngle)
+      } else {
+        this.velocity.y = 0 // No vertical movement on flat ground
+      }
+    }
+  }
+
+  private checkGroundCollision(): void {
+    let terrainHeight = GameSettings.level.groundY
+    
+    // Get terrain height from LevelGenerator if available
+    if (this.levelGenerator) {
+      terrainHeight = this.getTerrainHeightFromChunks(this.x)
+    } else {
+      // Fallback to DynamicTerrain
+      terrainHeight = this.terrain.getHeightAtX(this.x)
+    }
+    
+    const motorcycleBottom = this.y + 20 // Account for motorcycle height from center
+    const targetY = terrainHeight - 20 // Where we want to be
+    
+    // Check for terrain drop - if terrain is significantly below current position, let motorcycle fall naturally
+    const terrainDropThreshold = 50 // pixels - adjust this to control sensitivity
+    const isTerrainDrop = this.isOnGround && (terrainHeight > this.y + terrainDropThreshold)
+    
+    if (motorcycleBottom >= terrainHeight && !isTerrainDrop) {
+      // Increase stability counter when we should be on ground
+      this.groundCheckStability = Math.min(this.groundCheckStability + 1, 10)
+      
+      // Smooth terrain following to prevent bouncing
+      if (this.isOnGround) {
+        // Already on ground - use smooth interpolation instead of instant snapping
+        const smoothFactor = 0.2 // Reduced for more stability
+        const yDifference = targetY - this.y
+        
+        // Only apply smooth correction if the difference is small (normal terrain following)
+        if (Math.abs(yDifference) < 25) {
+          this.y += yDifference * smoothFactor
+        } else {
+          // Large difference - snap to terrain (for big drops/jumps)
+          this.y = targetY
+        }
+      } else {
+        // Landing from air - snap to terrain
+        this.y = targetY
+      }
+      
+      if (!this.isOnGround) {
+        // Just landed from being in air - check for crash
+        if (this.checkForCrash()) {
+          // Crashed! Game over
+          console.log("Snowboarder crashed on landing!")
+          if (this.onCrash) {
+            this.onCrash()
+          }
+          return // Don't process normal landing
+        }
+        
+        this.isOnGround = true
+        
+        // Absorb some vertical velocity on landing, keep horizontal momentum
+        this.velocity.y *= 0.1 // Dampen vertical bounce
+        
+        // Reset all flip states
+        this.isFlipping = false;
+        this.isAutoCorreting = false;
+        this.flipRotation = 0;
+        
+        // Change back to normal image when landing and restore position/scale
+        (this.riderSprite as any).setTexture('player');
+        this.riderSprite.setPosition(-10, 80); // Restore original position
+        this.riderSprite.setScale(0.18); // Restore original scale
+        
+        // Process trick combo on landing
+        this.processLandingTricks()
+        
+        console.log("Snowboarder landed safely!")
+        
+        if (this.onLanding) {
+          this.onLanding()
+        }
+      } else {
+        // Already on ground - check for momentum launches
+        this.checkMomentumLaunch(terrainHeight)
+      }
+      
+      // Update rotation to match terrain slope when on ground
+      if (this.isOnGround && !this.isFlipping) {
+        this.updateTerrainRotation()
+      }
+    } else {
+      // Above terrain or terrain drop detected - should be in air
+      // Decrease stability counter when not on ground
+      this.groundCheckStability = Math.max(this.groundCheckStability - 2, 0)
+      
+      // Only set airborne if we've been off ground for a few frames (stability check)
+      if (this.isOnGround && this.groundCheckStability <= 3) {
+        if (isTerrainDrop) {
+          this.isOnGround = false
+          console.log("Motorcycle fell off terrain drop")
+        } else if (motorcycleBottom < terrainHeight - 20) { // Increased threshold
+          this.isOnGround = false
+          console.log("Motorcycle left ground")
+        }
+      }
+    }
+  }
+
+  private getTerrainHeightFromChunks(x: number): number {
+    // Find the terrain height from LevelGenerator chunks
+    const chunks = this.levelGenerator.getChunks()
+    
+    for (const chunk of chunks) {
+      if (x >= chunk.x && x <= chunk.x + chunk.width) {
+        // Found the chunk containing this x position
+        if (chunk.terrainPath && chunk.terrainPath.length > 0) {
+          // Interpolate between terrain path points
+          for (let i = 0; i < chunk.terrainPath.length - 1; i++) {
+            const p1 = chunk.terrainPath[i]
+            const p2 = chunk.terrainPath[i + 1]
+            
+            if (x >= p1.x && x <= p2.x) {
+              // Interpolate between these two points
+              const t = (x - p1.x) / (p2.x - p1.x)
+              return p1.y + t * (p2.y - p1.y)
+            }
+          }
+          // Return first point if no interpolation found
+          return chunk.terrainPath[0].y
+        }
+        // Fallback to ground level
+        return GameSettings.level.groundY
+      }
+    }
+    
+    // No chunk found, return ground level
+    return GameSettings.level.groundY
+  }
+
+  private getTerrainAngleFromChunks(x: number): number {
+    // Calculate terrain angle from LevelGenerator chunks
+    const chunks = this.levelGenerator.getChunks()
+    
+    for (const chunk of chunks) {
+      if (x >= chunk.x && x <= chunk.x + chunk.width) {
+        // Found the chunk containing this x position
+        if (chunk.terrainPath && chunk.terrainPath.length > 1) {
+          // Find the two nearest points for slope calculation
+          for (let i = 0; i < chunk.terrainPath.length - 1; i++) {
+            const p1 = chunk.terrainPath[i]
+            const p2 = chunk.terrainPath[i + 1]
+            
+            if (x >= p1.x && x <= p2.x) {
+              // Calculate angle between these two points
+              const deltaY = p2.y - p1.y
+              const deltaX = p2.x - p1.x
+              return Math.atan2(deltaY, deltaX)
+            }
+          }
+        }
+      }
+    }
+    
+    return 0 // No slope found
+  }
+
+  private checkMomentumLaunch(terrainHeight: number): void {
+    // Get current terrain angle
+    let currentTerrainAngle = 0
+    if (this.levelGenerator) {
+      currentTerrainAngle = this.getTerrainAngleFromChunks(this.x)
+    } else {
+      currentTerrainAngle = this.terrain.getSlopeAngleAtX(this.x)
+    }
+    
+    // Detect ramp launch conditions - look for upward ramps with sufficient speed
+    const isUpwardRamp = currentTerrainAngle < -0.2 // Strong upward slope
+    const hasSpeed = this.velocity.x > this.baseSpeed * 1.3 // Need good speed for launch
+    const significantRamp = Math.abs(currentTerrainAngle) > 0.2 // Must be a real ramp, not just bumpy terrain
+    
+    // Check for ramp launch conditions
+    if (isUpwardRamp && hasSpeed && significantRamp) {
+      // Convert horizontal momentum to launch velocity (REDUCED)
+      const speedBonus = (this.velocity.x - this.baseSpeed) / (this.maxSpeed - this.baseSpeed)
+      const launchPower = speedBonus * this.momentumMultiplier * 150 // Reduced from 400 to 150
+      
+      // Add jump boost if player is holding input (REDUCED)
+      const jumpBoost = this.isInputHeld ? 80 : 0 // Reduced from 200 to 80
+      
+      // Cap the total launch power
+      const totalLaunchPower = Math.min(launchPower + jumpBoost, 300) // Maximum 300 launch power
+      
+      // Launch the motorcycle
+      this.velocity.y = -totalLaunchPower
+      this.isOnGround = false
+      
+      console.log(`Momentum launch! Speed: ${this.velocity.x.toFixed(0)}, Launch power: ${totalLaunchPower.toFixed(0)}`)
+    } else {
+      // Normal ground following
+      this.velocity.y = 0
+    }
+    
+    // Update previous angle for next frame
+    this.previousTerrainAngle = currentTerrainAngle
+  }
+
+  private updateTerrainRotation(): void {
+    let terrainAngle = 0
+    
+    if (this.levelGenerator) {
+      terrainAngle = this.getTerrainAngleFromChunks(this.x)
+    } else {
+      terrainAngle = this.terrain.getSlopeAngleAtX(this.x)
+    }
+    
+    // Smooth rotation interpolation
+    const rotationSpeed = 5 // Adjust for smoother/faster rotation
+    const targetRotation = terrainAngle
+    const currentRotation = this.rotation
+    
+    // Use angular interpolation for smooth rotation
+    let angleDiff = targetRotation - currentRotation
+    
+    // Normalize angle difference to [-π, π]
+    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI
+    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI
+    
+    // Apply smooth rotation
+    this.rotation = currentRotation + angleDiff * rotationSpeed * 0.016 // Assuming 60fps
+  }
+
+  private processLandingTricks(): void {
+    if (this.currentTricks.length > 0 || this.airTime > 0.5) {
+      // Calculate score based on tricks and air time
+      let baseScore = Math.floor(this.airTime * 100) // Base points for air time
+      
+      // Add points for each trick
+      this.currentTricks.forEach(trick => {
+        if (trick === "360 Spin") {
+          baseScore += 500
+        }
+      })
+      
+      // Calculate multiplier based on air time and trick count
+      this.comboMultiplier = Math.floor(1 + (this.airTime / 2) + (this.currentTricks.length * 0.5))
+      
+      // Add style points for long air time
+      if (this.airTime > 2) {
+        this.currentTricks.push("Big Air")
+        baseScore += 300
+      }
+      
+      if (this.airTime > 3) {
+        this.currentTricks.push("Massive Air")  
+        baseScore += 500
+      }
+      
+      // Notify about completed combo
+      if (this.onTrickComplete && (this.currentTricks.length > 0 || this.airTime > 0.5)) {
+        this.onTrickComplete(this.currentTricks, this.comboMultiplier, this.airTime)
+      }
+    }
+    
+    // Reset for next combo
+    this.currentTricks = []
+    this.airTime = 0
+    this.comboMultiplier = 1
+  }
+
+  private updateWheelRotation(deltaTime: number): void {
+    // Rotate wheels based on forward movement
+    const rotationSpeed = this.velocity.x / 20 // Adjust for realistic wheel rotation
+    this.frontWheel.rotation += rotationSpeed * deltaTime / 1000
+    this.backWheel.rotation += rotationSpeed * deltaTime / 1000
   }
 
   public reset(x: number, y: number): void {
-    const MatterLib = Phaser.Physics.Matter.Matter
-    
-    this.setPosition(x, y)
-    
-    // Reset chassis
-    MatterLib.Body.setPosition(this.body, { x, y })
-    MatterLib.Body.setVelocity(this.body, { x: GameSettings.motorcycle.minSpeed, y: 0 })
-    MatterLib.Body.setAngularVelocity(this.body, 0)
-    MatterLib.Body.setAngle(this.body, 0)
-    
-    // Reset wheels
-    MatterLib.Body.setPosition(this.frontWheelBody, { x: x - 20, y: y + 15 })
-    MatterLib.Body.setVelocity(this.frontWheelBody, { x: GameSettings.motorcycle.minSpeed, y: 0 })
-    MatterLib.Body.setAngularVelocity(this.frontWheelBody, 0)
-    
-    MatterLib.Body.setPosition(this.backWheelBody, { x: x + 20, y: y + 15 })
-    MatterLib.Body.setVelocity(this.backWheelBody, { x: GameSettings.motorcycle.minSpeed, y: 0 })
-    MatterLib.Body.setAngularVelocity(this.backWheelBody, 0)
-    
+    this.x = x
+    this.y = y
     this.rotation = 0
-    this.currentRotation = 0
+    this.isOnGround = true
     this.isFlipping = false
-    this.isOnGround = false
+    this.isAutoCorreting = false
+    this.isInputHeld = false
     this.completedFlips = 0
-    this.wasInAir = false
-    this.currentSlope = 0
-    this.stuckTimer = 0
-    this.turboActive = false
-    this.turboMultiplier = 1.0
+    this.flipRotation = 0
+    this.previousTerrainAngle = 0
+    this.velocity.set(this.baseSpeed, 0) // Reset to base speed
+    
+    // Reset physics body position
+    if (this.body) {
+      this.scene.matter.body.setPosition(this.body, { x: this.x, y: this.y })
+    }
+    
+    console.log(`Snowboarder reset to position: ${x}, ${y}`)
   }
 }

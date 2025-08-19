@@ -7,43 +7,43 @@ export const GameSettings = {
   debug: true,
 
   canvas: {
-    width: 1000,
-    height: 1800,
+    width: 400, // Portrait: narrower width for mobile
+    height: 800, // Portrait: taller height for mobile
   },
 
   motorcycle: {
     width: 60,
     height: 30,
-    maxSpeed: 1800,
-    acceleration: 2500, // Much higher base acceleration for power
-    airControl: 0.4,
-    jumpPower: 900, // More jump power
-    gravity: 800, // Reduced gravity for the motorcycle specifically
+    maxSpeed: 2800, // More reasonable top speed - faster than before but not crazy
+    acceleration: 3500, // Good acceleration but not excessive
+    airControl: 0.5, // Slightly improved air control
+    jumpPower: 1000, // Good jump power
+    gravity: 750, // Balanced gravity
     flipSpeed: 360, // degrees per second
-    startX: 200,
-    startY: 1500, // Fixed: positioned above ground (ground is at 1600)
-    hillClimbPower: 2.5, // Much more power when climbing
-    mass: 0.8, // Lighter mass for better acceleration
-    boostPower: 3500, // Extra boost when really stuck
-    minSpeed: 200, // Minimum speed to maintain
-    torqueMultiplier: 1.8, // Torque for wheel grip
+    startX: 100, // Adjusted for narrower portrait view
+    startY: 220, // Start 500px above ground level (720-500=220)
+    hillClimbPower: 4.0, // Good uphill power but not extreme
+    mass: 0.6, // Balanced mass
+    boostPower: 5000, // Good boost power
+    minSpeed: 350, // Higher minimum speed for better flow
+    torqueMultiplier: 2.8, // Good torque for uphills without being crazy
   },
 
   physics: {
-    gravity: 1000, // Reduced overall gravity
-    groundFriction: 0.985, // Less friction for maintaining speed
-    airFriction: 0.998, // Less air resistance
-    slopeFriction: 0.95, // Special friction for slopes
+    gravity: 900, // Reduced overall gravity for floatier feel
+    groundFriction: 0.992, // Much less friction for maintaining speed
+    airFriction: 0.999, // Almost no air resistance
+    slopeFriction: 0.98, // Much less friction on slopes for better uphill speed retention
   },
 
   level: {
     scrollSpeed: 400, // base scroll speed
     speedIncrement: 20, // speed increase per 10 seconds
     maxSpeed: 1000,
-    groundY: 1600,
-    chunkWidth: 400,
-    rampHeight: 150,
-    platformHeight: 100,
+    groundY: 720, // Much lower ground level for more jump space
+    chunkWidth: 300, // Smaller chunks for portrait
+    rampHeight: 120, // Adjusted for smaller screen
+    platformHeight: 80, // Adjusted for smaller screen
   },
 
   scoring: {

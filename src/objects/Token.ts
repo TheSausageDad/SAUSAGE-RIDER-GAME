@@ -41,19 +41,17 @@ export class Token extends Phaser.GameObjects.Container {
     
     // Link to game object
     this.scene.matter.add.gameObject(this, this.body)
+    
+    // Ensure the body has a reference to this game object
+    this.body.gameObject = this
   }
 
   public update(deltaTime: number): void {
     if (this.isCollected) return
 
-    // Rotate the token for visual appeal
+    // Simplified animation - only rotate (no floating to improve performance)
     const dt = deltaTime / 1000
     this.rotation += Phaser.Math.DegToRad(this.rotationSpeed * dt)
-
-    // Add floating animation
-    const time = this.scene.time.now * 0.002
-    const floatOffset = Math.sin(time + this.x * 0.01) * 10
-    this.y += floatOffset * dt
   }
 
   public collect(): void {
@@ -83,6 +81,15 @@ export class Token extends Phaser.GameObjects.Container {
   }
 
   public destroy(): void {
-    super.destroy()
+    try {
+      // Properly cleanup Matter.js physics body
+      if (this.body && this.scene.matter) {
+        this.scene.matter.world.remove(this.body)
+        this.body = null as any // Clear reference
+      }
+      super.destroy()
+    } catch (error) {
+      console.error("Token destroy error:", error)
+    }
   }
 }
