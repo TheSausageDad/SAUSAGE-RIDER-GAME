@@ -29,6 +29,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   private airTime: number = 0 // Time in air for scoring
   private comboMultiplier: number = 1
   private currentTricks: string[] = [] // Track tricks in current combo
+  private justJumpedOffRail: boolean = false // Flag to prevent rail physics for one frame
+  private lastJumpTime: number = 0 // Timestamp of last jump to prevent double jumping
   
   // Crash detection
   public onCrash: (() => void) | null = null
@@ -36,7 +38,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   // Continuous flip controls
   private isInputHeld: boolean = false
   private flipSpeed: number = 360 // degrees per second when flipping (reduced for slower rotation)
-  private autoCorrectSpeed: number = 360 // degrees per second for auto-correction
+  private autoCorrectSpeed: number = 90 // degrees per second for auto-correction (much slower to allow crashes)
   private isAutoCorreting: boolean = false
   
   // Momentum-based launching
@@ -47,6 +49,19 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   public onFlipComplete: ((flips: number) => void) | null = null
   public onLanding: (() => void) | null = null
   public onTrickComplete: ((tricks: string[], multiplier: number, airTime: number) => void) | null = null
+
+  // Snow trail particle system
+  private snowParticles: Phaser.GameObjects.Particles.ParticleEmitter | null = null
+
+  // Rail grinding system
+  public isGrinding: boolean = false
+  private currentRail: any = null // Reference to the rail being ground
+  private grindStartTime: number = 0
+  private grindScore: number = 0
+  private lastRailLogTime: number = 0
+  private grindParticles: Phaser.GameObjects.Particles.ParticleEmitter | null = null
+  public onGrindStart: (() => void) | null = null
+  public onGrindEnd: ((grindTime: number, grindScore: number) => void) | null = null
 
   constructor(scene: Phaser.Scene, x: number, y: number, terrain: DynamicTerrain, levelGenerator?: LevelGenerator) {
     super(scene, x, y)
@@ -62,6 +77,9 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     
     this.createSprites()
     this.setupPhysics()
+    this.createSnowTrail()
+    this.createGrindTrail()
+    // this.createDebugCollisionVisual() // DISABLED - collision outline turned off
     
     // Position motorcycle on ground initially
     this.positionOnGround()
@@ -71,8 +89,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     console.log(`Creating sausage character at position: ${this.x}, ${this.y}`)
     
     // Use the sausage character image
-    this.riderSprite = this.scene.add.image(-10, 80, 'player') as any
-    this.riderSprite.setScale(0.18) // Increased scale for bigger normal image
+    this.riderSprite = this.scene.add.image(-10, 140, 'player') as any
+    this.riderSprite.setScale(0.32) // Increased scale for bigger and more visible player (75% larger)
     this.riderSprite.setOrigin(0.5, 1.0) // Center horizontally, bottom of image at ground level
     this.add(this.riderSprite)
 
@@ -96,21 +114,132 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   }
 
   private setupPhysics(): void {
-    // Create a sensor physics body for collision detection only (doesn't affect movement)
+    // REVERTED: Use sensor body to avoid interference with normal gameplay
+    // The grinding will work through distance-based detection, not physics collision
+    const bottomOffset = 30 // Position collision body at bottom of sprite (proportionally larger)
     this.body = this.scene.matter.add.circle(
-      this.x, this.y, 20,
+      this.x, this.y + bottomOffset, 22, // Larger collision body (50% bigger: 15 -> 22)
       {
-        isSensor: true, // Doesn't collide physically, just detects overlaps
-        label: 'player',
-        isStatic: false // Allow manual position updates
+        isSensor: true, // SENSOR body - no physical collision but detects overlaps
+        label: 'motorcycle', // Match the label expected in collision detection
+        isStatic: false,
+        // Set collision filter to match rail expectations for collision events
+        collisionFilter: {
+          category: 0x0001, // Player category that rails expect
+          mask: 0x0002      // Detect collision with rails (category 0x0002)
+        }
       }
-    )
+    ) as MatterJS.Body
     
     // Store reference to this motorcycle on the body for collision detection
-    this.body.gameObject = this
+    (this.body as any).gameObject = this
     
-    // DO NOT link with matter.add.gameObject - we want to keep custom physics
-    console.log("Motorcycle collision body created (no physics control)")
+    // Don't use gameObject integration to avoid physics control conflicts
+    // this.scene.matter.add.gameObject(this, this.body)
+    
+    console.log("🔧 Motorcycle SENSOR physics body created (collision detection only)")
+    console.log("🔧 Body ID:", (this.body as any).id)
+    console.log("🔧 Body label:", (this.body as any).label)
+    console.log("🔧 Body isSensor:", (this.body as any).isSensor)
+    console.log("🔧 Body collision category:", this.body.collisionFilter.category)
+    console.log("🔧 Body collision mask:", this.body.collisionFilter.mask)
+  }
+
+  private debugCollisionVisual?: Phaser.GameObjects.Graphics
+
+  private createDebugCollisionVisual(): void {
+    // Create a red circle to show where the collision body is
+    this.debugCollisionVisual = this.scene.add.graphics()
+    this.debugCollisionVisual.lineStyle(2, 0xFF0000, 1.0) // Red outline
+    this.debugCollisionVisual.fillStyle(0xFF0000, 0.3) // Semi-transparent red fill
+    this.debugCollisionVisual.fillCircle(0, 30, 22) // Bottom of motorcycle, 22px radius (updated for larger size)
+    this.debugCollisionVisual.strokeCircle(0, 30, 22)
+    
+    // Add text label
+    const debugText = this.scene.add.text(0, 55, 'COLLISION', {
+      fontSize: '10px',
+      color: '#FF0000',
+      backgroundColor: '#FFFFFF'
+    })
+    debugText.setOrigin(0.5, 0.5)
+    
+    this.add([this.debugCollisionVisual, debugText])
+    console.log("🔴 DEBUG: Motorcycle collision body visualized with red circle")
+  }
+
+  private updateCollisionBody(): void {
+    if (this.body && this.scene.matter && (this.scene.matter as any).Matter) {
+      const Matter = (this.scene.matter as any).Matter
+      const bottomOffset = 30 // Same offset as in setupPhysics (proportionally larger)
+      
+      // Keep collision body at bottom of motorcycle sprite
+      const bottomX = this.x
+      const bottomY = this.y + bottomOffset
+      
+      Matter.Body.setPosition(this.body, { x: bottomX, y: bottomY })
+      
+      // Debug: Update visual collision indicator position (it's relative to container)
+      // The visual is already positioned at offset 20, so no need to update
+    }
+  }
+
+  private createSnowTrail(): void {
+    // Create realistic snow pickup trail with simpler API
+    const emitterConfig = {
+      speed: { min: 60, max: 150 },
+      scale: { start: 0.8, end: 0.1 },
+      alpha: { start: 1.0, end: 0.0 },
+      lifespan: 1000,
+      frequency: 20,
+      quantity: 5,
+      angle: { min: 150, max: 210 }, // Spray behind player
+      gravityY: 100,
+      emitZone: {
+        type: 'random',
+        source: new Phaser.Geom.Rectangle(-25, 0, 50, 15)
+      }
+    }
+    
+    this.snowParticles = this.scene.add.particles(this.x, this.y, 'snow-particle', emitterConfig)
+    
+    // Set depth and visibility
+    this.snowParticles.setDepth(50)
+    this.snowParticles.setVisible(true)
+    
+    // Start stopped
+    this.snowParticles.stop()
+    
+    console.log("Snow trail particle emitter created")
+  }
+
+  private createGrindTrail(): void {
+    // Create sparkling grind particles for rail grinding
+    const grindConfig = {
+      speed: { min: 80, max: 200 },
+      scale: { start: 0.6, end: 0.0 },
+      alpha: { start: 1.0, end: 0.0 },
+      lifespan: 600,
+      frequency: 10, // More frequent for intense grinding effect
+      quantity: 8,
+      angle: { min: 45, max: 135 }, // Spray upward and to sides
+      gravityY: 200,
+      tint: [0xFFD700, 0xFFA500, 0xFF4500], // Gold/orange sparks
+      emitZone: {
+        type: 'random',
+        source: new Phaser.Geom.Rectangle(-15, -5, 30, 10)
+      }
+    }
+    
+    this.grindParticles = this.scene.add.particles(this.x, this.y, 'snow-particle', grindConfig)
+    
+    // Set depth and visibility
+    this.grindParticles.setDepth(75) // Above snow, below player
+    this.grindParticles.setVisible(true)
+    
+    // Start stopped
+    this.grindParticles.stop()
+    
+    console.log("Grind trail particle emitter created")
   }
 
   private positionOnGround(): void {
@@ -124,22 +253,41 @@ export class Motorcycle extends Phaser.GameObjects.Container {
         terrainHeight = this.terrain.getHeightAtX(this.x)
       }
       
-      this.y = terrainHeight - 20 // Position on terrain (matching collision detection)
+      this.y = terrainHeight - 30 // Position on terrain (matching collision detection, proportionally larger)
       this.isOnGround = true // Make sure we start on ground
       this.velocity.y = 0 // No initial vertical velocity
       console.log(`Snowboarder positioned on ground at: ${this.x}, ${this.y}, terrain height: ${terrainHeight}`)
     })
   }
 
+  public getVelocity(): Phaser.Math.Vector2 {
+    return this.velocity
+  }
+
   public handleInput(isPressed: boolean): void {
     const wasInputHeld = this.isInputHeld
     this.isInputHeld = isPressed
     
-    // Handle initial press for jumping
-    if (isPressed && !wasInputHeld && this.isOnGround) {
-      // First press while on ground = jump
-      this.jump()
-      return
+    // Handle initial press for jumping - use forgiving ground detection for rolling hills
+    if (isPressed && !wasInputHeld) {
+      const currentTime = this.scene.time.now
+      const timeSinceLastJump = currentTime - this.lastJumpTime
+      const jumpCooldown = 300 // 300ms cooldown to prevent double jumping
+      
+      const canJumpStrict = this.isOnGround
+      const canJumpForgiving = this.canJumpFromGround()
+      const cooldownPassed = timeSinceLastJump > jumpCooldown
+      
+      if ((canJumpStrict || canJumpForgiving) && cooldownPassed) {
+        // First press while on/near ground = jump (more forgiving for rolling terrain)
+        console.log(`🦘 JUMP ALLOWED: strict=${canJumpStrict}, forgiving=${canJumpForgiving}, cooldown=${timeSinceLastJump.toFixed(0)}ms`)
+        this.lastJumpTime = currentTime
+        this.jump()
+        return
+      } else {
+        const reason = !cooldownPassed ? `cooldown (${timeSinceLastJump.toFixed(0)}ms < ${jumpCooldown}ms)` : `ground detection`
+        console.log(`🚫 JUMP DENIED: ${reason}, strict=${canJumpStrict}, forgiving=${canJumpForgiving}`)
+      }
     }
     
     // Handle continuous flipping only when truly airborne
@@ -148,8 +296,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
         if (!this.isFlipping) {
           // Start flipping - change to flipping image and adjust position/scale
           (this.riderSprite as any).setTexture('player_flipping');
-          this.riderSprite.setPosition(0, 60); // Move down closer to ground
-          this.riderSprite.setScale(0.2); // Slightly larger scale for flipping image
+          this.riderSprite.setPosition(0, 120); // Move down closer to ground (adjusted for larger sprite)
+          this.riderSprite.setScale(0.35); // Proportionally larger scale for flipping image
         }
         this.isFlipping = true
         this.isAutoCorreting = false
@@ -157,8 +305,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
         if (this.isFlipping) {
           // Stop flipping - change back to normal image and restore position/scale
           (this.riderSprite as any).setTexture('player');
-          this.riderSprite.setPosition(-10, 80); // Restore original position
-          this.riderSprite.setScale(0.18); // Restore original scale
+          this.riderSprite.setPosition(-10, 140); // Restore original position (adjusted for larger sprite)
+          this.riderSprite.setScale(0.32); // Restore original scale (proportionally larger)
         }
         this.isFlipping = false
         // Check if we need auto-correction
@@ -169,8 +317,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       if (this.isFlipping) {
         // Stop flipping - change back to normal image and restore position/scale
         (this.riderSprite as any).setTexture('player');
-        this.riderSprite.setPosition(-10, 80); // Restore original position
-        this.riderSprite.setScale(0.18); // Restore original scale
+        this.riderSprite.setPosition(-10, 140); // Restore original position (adjusted for larger sprite)
+        this.riderSprite.setScale(0.32); // Restore original scale (proportionally larger)
       }
       this.isFlipping = false
       this.isAutoCorreting = false
@@ -178,6 +326,39 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   }
 
   public jump(): void {
+    // Special handling for jumping off rails - MORE AGGRESSIVE
+    if (this.isGrinding) {
+      console.log("🟡 JUMP OFF RAIL: Starting jump sequence")
+      
+      // FIRST: Stop grinding immediately and clear all state
+      this.isGrinding = false
+      this.currentRail = null
+      this.lastScoreUpdate = 0
+      this.justJumpedOffRail = true // Prevent rail physics for one frame
+      console.log("🟡 JUMP: Grinding state cleared")
+      
+      // SECOND: Set proper jump physics
+      this.velocity.y = -this.jumpPower
+      this.isOnGround = false
+      console.log("🟡 JUMP: Set velocity.y to", -this.jumpPower, "and isOnGround to false")
+      
+      // THIRD: Stop particles
+      if (this.grindParticles) {
+        this.grindParticles.stop()
+        console.log("🟡 JUMP: Grind particles stopped")
+      }
+      
+      // FOURTH: Call onGrindEnd for any final scoring
+      const grindTime = (Date.now() - this.grindStartTime) / 1000
+      if (this.onGrindEnd && grindTime > 0.2) {
+        this.onGrindEnd(grindTime, this.grindScore)
+        console.log("🟡 JUMP: Final grind score reported")
+      }
+      
+      console.log("🟡 JUMP OFF RAIL COMPLETE: isGrinding:", this.isGrinding, "velY:", this.velocity.y)
+      return
+    }
+    
     // Check if motorcycle is close enough to terrain to jump (more lenient than isOnGround)
     if (this.canJumpFromGround()) {
       // Jump perpendicular to the terrain for realistic physics
@@ -234,7 +415,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       terrainHeight = this.terrain.getHeightAtX(this.x)
     }
     
-    const snowboarderBottom = this.y + 20 // Account for snowboarder height from center
+    const snowboarderBottom = this.y + 30 // Account for snowboarder height from center (proportionally larger)
     const clearanceThreshold = 15 // Must be at least 15 pixels clear of terrain
     
     return snowboarderBottom < (terrainHeight - clearanceThreshold)
@@ -252,13 +433,13 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       terrainHeight = this.terrain.getHeightAtX(this.x)
     }
     
-    const motorcycleBottom = this.y + 20 // Account for motorcycle height from center
-    let jumpThreshold = 40 // Increased base jump threshold for stability
+    const motorcycleBottom = this.y + 30 // Account for motorcycle height from center (proportionally larger)
+    let jumpThreshold = 50 // Moderately forgiving base jump threshold for rolling hills
     
-    // Make jumping much more forgiving with high speed
+    // Make jumping more forgiving with high speed
     if (this.velocity.x > this.baseSpeed * 1.2) {
       // High speed = more forgiving jump
-      jumpThreshold = 60
+      jumpThreshold = 70
     }
     
     // Get terrain angle to detect slopes
@@ -268,10 +449,10 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     
     // Make jumping extra forgiving on ANY slope (uphill or downhill)
     const slopeStrength = Math.abs(terrainAngle)
-    if (slopeStrength > 0.1) { // Any significant slope
-      jumpThreshold = 80 // Extra forgiving on all slopes
+    if (slopeStrength > 0.1) { // Gentle slopes get extra forgiveness
+      jumpThreshold = 80 // Forgiving on slopes
       
-      // Even more forgiving on steep slopes
+      // More forgiving on steep slopes
       if (slopeStrength > 0.3) {
         jumpThreshold = 100 // Very forgiving on steep slopes
       }
@@ -279,35 +460,62 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     
     // Special case: if going uphill with good speed, be extra lenient
     if (terrainAngle < -0.2 && this.velocity.x > this.baseSpeed * 1.3) {
-      jumpThreshold = 120 // Super forgiving for uphill momentum jumps
+      jumpThreshold = 120 // Extra forgiving for uphill momentum jumps
     }
     
-    return motorcycleBottom >= (terrainHeight - jumpThreshold)
+    const canJump = motorcycleBottom >= (terrainHeight - jumpThreshold)
+    
+    // Debug logging to help understand jump availability
+    if (Math.random() < 0.02) { // 2% chance to log
+      const distance = terrainHeight - motorcycleBottom
+      console.log(`🦘 JUMP CHECK: distance=${distance.toFixed(1)}px, threshold=${jumpThreshold}px, canJump=${canJump}, slope=${(terrainAngle * 180/Math.PI).toFixed(1)}°`)
+    }
+    
+    return canJump
   }
 
   private checkForCrash(): boolean {
-    // Check if snowboarder is landing head-first (much more forgiving)
+    // Only crash if player is upside down AND their head hits the ground
+    const hitboxRadius = 22 // Circle collision body radius
+    
+    // Check if motorcycle is upside down (rotation between 90 and 270 degrees)
     const normalizedRotation = ((this.rotation % (Math.PI * 2)) + (Math.PI * 2)) % (Math.PI * 2)
+    const isUpsideDown = normalizedRotation > Math.PI/2 && normalizedRotation < (Math.PI * 3/2)
     
-    // Only crash if landing nearly upside down (head touching ground)
-    // Safe zone: everything except the narrow "head-first" range around 180 degrees (π)
-    const headFirstRange = Math.PI / 3 // 60 degrees range around upside down (±30°)
-    const upsideDown = Math.PI // 180 degrees
+    // If not upside down, no crash possible
+    if (!isUpsideDown) {
+      console.log(`✅ SAFE: Player not upside down (${(this.rotation * 180 / Math.PI).toFixed(1)}°)`)
+      return false
+    }
     
-    // Check if we're in the dangerous head-first landing zone
-    const distanceFromUpsideDown = Math.min(
-      Math.abs(normalizedRotation - upsideDown),
-      Math.abs(normalizedRotation - (upsideDown + Math.PI * 2)),
-      Math.abs(normalizedRotation - (upsideDown - Math.PI * 2))
-    )
+    // Player is upside down - check if head hits ground
+    const crashZoneHeight = hitboxRadius * 0.60 // Top 60% of the circle (head area)
     
-    // Only crash if landing very close to upside down (head-first)
-    if (distanceFromUpsideDown < headFirstRange / 2) {
-      // Head is touching ground - crash!
+    // Get terrain height at player position
+    let terrainHeight = GameSettings.level.groundY
+    if (this.levelGenerator) {
+      terrainHeight = this.getTerrainHeightFromChunks(this.x)
+    } else {
+      terrainHeight = this.terrain.getHeightAtX(this.x)
+    }
+    
+    // Calculate the collision body center position (30px below container center)
+    const collisionBodyCenterY = this.y + 30
+    
+    // Calculate the top of the crash zone (head area when upside down)
+    const crashZoneTopY = collisionBodyCenterY - hitboxRadius + crashZoneHeight
+    
+    // DEBUG: Always log crash check info
+    console.log(`🔍 CRASH CHECK: Player upside down (${(this.rotation * 180 / Math.PI).toFixed(1)}°), Head zone: ${crashZoneTopY.toFixed(1)}, Terrain: ${terrainHeight.toFixed(1)}, Diff: ${(crashZoneTopY - terrainHeight).toFixed(1)}`)
+    
+    // Check if the head area touches or penetrates the terrain while upside down
+    if (crashZoneTopY >= terrainHeight) {
+      console.log(`💥 CRASH DETECTED! Head hit ground while upside down! Head: ${crashZoneTopY.toFixed(1)}, Terrain: ${terrainHeight.toFixed(1)}`)
       return true
     }
     
-    return false // Safe landing - can land on side, back, etc.
+    console.log(`✅ SAFE: Head clear of terrain while upside down`)
+    return false // Safe - head is clear of terrain even while upside down
   }
 
   private checkAutoCorrection(): void {
@@ -328,12 +536,78 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     const clampedDeltaTime = Math.min(deltaTime, 33.33) // Max 30 FPS equivalent
     const dt = clampedDeltaTime / 1000
 
-    // Alto's Odyssey style movement
-    this.updateVelocityBasedOnTerrain(dt)
+    // RAIL RIDING MODE: Override normal physics when grinding
+    // BUT: Skip completely if we just jumped off a rail
+    if (this.justJumpedOffRail) {
+      console.log("🟡 SKIPPING RAIL PHYSICS: Just jumped off rail, using normal physics")
+    }
     
-    // Apply movement
-    this.x += this.velocity.x * dt
-    this.y += this.velocity.y * dt
+    if (this.isGrinding && this.currentRail && !this.justJumpedOffRail) {
+      // If player has significant upward velocity, they're jumping off - stop grinding
+      if (this.velocity.y < -100) { // Strong upward velocity indicates jump
+        console.log(`🟡 VELOCITY EXIT: Player jumping off rail with velY:${this.velocity.y.toFixed(1)}`)
+        this.stopGrinding()
+        this.isOnGround = false
+        return // Exit to allow normal physics
+      }
+      
+      const oldX = this.x
+      const oldY = this.y
+      
+      // Move along rail horizontally first
+      this.x += this.velocity.x * dt
+      
+      // CRITICAL FIX: Follow rail angle/slope instead of staying at fixed Y
+      const railRotation = this.currentRail.rotation || 0
+      const railCenterX = this.currentRail.x
+      const railCenterY = this.currentRail.y
+      
+      // Calculate player position relative to rail center
+      const deltaX = this.x - railCenterX
+      
+      // LENIENT RAIL BOUNDARY: Only exit if player is VERY far from rail
+      const railWidth = 300 // Rails are 300px wide (from Rail.ts)
+      const railHalfWidth = railWidth / 2
+      const lenientBuffer = 80 // Larger buffer to keep player on rail longer
+      
+      if (Math.abs(deltaX) > railHalfWidth + lenientBuffer) {
+        // Player has moved way beyond rail boundary - stop grinding
+        console.log(`🔴 LENIENT BOUNDARY EXIT: deltaX=${deltaX.toFixed(1)} > ${railHalfWidth + lenientBuffer}`)
+        this.stopGrinding()
+        this.isOnGround = false
+        return // Exit early to resume normal physics
+      } else if (Math.random() < 0.05) { // 5% chance to log position
+        console.log(`🟣 ON RAIL: deltaX=${deltaX.toFixed(1)}/${railHalfWidth + lenientBuffer}`)
+      }
+      
+      // Calculate Y position based on rail slope
+      if (Math.abs(railRotation) > 0.01) {
+        // Rail is angled - follow the slope
+        const slopeY = deltaX * Math.tan(railRotation)
+        this.y = railCenterY + slopeY - 20 // 20px above rail surface
+      } else {
+        // Flat rail - stay at fixed height
+        this.y = railCenterY - 20
+      }
+      
+      this.velocity.y = 0 // No independent vertical movement while grinding
+      this.isOnGround = true // Consider grinding as being "on ground" for physics consistency
+      
+      // Debug logging occasionally
+      if (Math.random() < 0.02) { // 2% chance to log
+        console.log(`🟣 RAIL PHYSICS: Player:(${this.x.toFixed(1)},${this.y.toFixed(1)}) Rail:(${railCenterX.toFixed(1)},${railCenterY.toFixed(1)}) deltaX:${deltaX.toFixed(1)}`)
+      }
+    } else {
+      // Normal terrain following mode
+      this.updateVelocityBasedOnTerrain(dt)
+      
+      // Apply movement
+      this.x += this.velocity.x * dt
+      this.y += this.velocity.y * dt
+    }
+    
+    // Update collision body to stay at bottom of motorcycle
+    this.updateCollisionBody()
     
     // No height limit - allow unlimited jumping
 
@@ -355,6 +629,14 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     if (this.isOnGround && this.velocity.x < this.minSpeed) {
       this.velocity.x = this.minSpeed
     }
+
+    // Update snow trail
+    this.updateSnowTrail()
+
+    // Update grind trail
+    this.updateGrindTrail()
+
+    // Rail alignment is now handled in main update loop - no need for separate maintenance
 
     // Handle continuous flipping and auto-correction
     if (this.isTrulyAirborne()) {
@@ -413,8 +695,34 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     // Update wheel rotation for visual effect
     this.updateWheelRotation(dt)
     
-    // Update physics body position to match visual position
-    this.scene.matter.body.setPosition(this.body, { x: this.x, y: this.y })
+    // CRITICAL: Final velocity clamping to prevent physics explosions
+    const beforeClampX = this.velocity.x
+    const beforeClampY = this.velocity.y
+    // Use much tighter velocity limits based on game settings
+    const maxVelX = this.maxSpeed * 1.2 // Allow 20% over max speed for brief moments
+    const maxVelY = 2000 // Reasonable vertical velocity limit
+    this.velocity.x = Phaser.Math.Clamp(this.velocity.x, -maxVelX, maxVelX)
+    this.velocity.y = Phaser.Math.Clamp(this.velocity.y, -maxVelY, maxVelY)
+    
+    // Debug extreme velocity
+    if (Math.abs(beforeClampY) > 3000) {
+      console.log("🚨 EXTREME VELOCITY DETECTED: Y was", beforeClampY.toFixed(1), "clamped to", this.velocity.y.toFixed(1))
+    }
+    
+    // Update physics body position and velocity to match visual position
+    if (this.body && this.scene.matter && (this.scene.matter as any).Matter) {
+      const Matter = (this.scene.matter as any).Matter
+      Matter.Body.setPosition(this.body, { x: this.x, y: this.y })
+      
+      // CRITICAL: Also clamp the Matter.js body velocity to match our clamped values
+      Matter.Body.setVelocity(this.body, { x: this.velocity.x, y: this.velocity.y })
+    }
+    
+    // Clear the jump flag at the very end of the frame
+    if (this.justJumpedOffRail) {
+      this.justJumpedOffRail = false
+      console.log("🟡 JUMP FLAG CLEARED: Normal physics resumed after rail jump")
+    }
   }
 
   private updateVelocityBasedOnTerrain(dt: number): void {
@@ -451,11 +759,14 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       // Apply acceleration with terrain-specific multiplier - more responsive
       const speedDiff = clampedSpeed - this.velocity.x
       const responsiveAcceleration = Math.max(accelerationMultiplier * dt, 0.1) // Minimum 10% change per frame
-      this.velocity.x += speedDiff * responsiveAcceleration
+      const cappedAcceleration = Math.min(responsiveAcceleration, 0.8) // CRITICAL: Cap acceleration to prevent velocity explosions
+      this.velocity.x += speedDiff * cappedAcceleration
       
       // Keep vertical velocity aligned with terrain when on ground only for slopes
       if (Math.abs(terrainAngle) > 0.01) { // Only adjust for actual slopes
-        this.velocity.y = this.velocity.x * Math.tan(terrainAngle)
+        const slopeVelocityY = this.velocity.x * Math.tan(terrainAngle)
+        // CRITICAL: Clamp vertical velocity to prevent physics explosions
+        this.velocity.y = Phaser.Math.Clamp(slopeVelocityY, -2000, 2000)
       } else {
         this.velocity.y = 0 // No vertical movement on flat ground
       }
@@ -463,6 +774,11 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   }
 
   private checkGroundCollision(dt: number): void {
+    // CRITICAL FIX: Don't do ground collision when grinding - let rail physics handle position
+    if (this.isGrinding) {
+      return // Skip all ground collision logic when grinding
+    }
+    
     let terrainHeight = GameSettings.level.groundY
     
     // Get terrain height from LevelGenerator if available
@@ -473,8 +789,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       terrainHeight = this.terrain.getHeightAtX(this.x)
     }
     
-    const motorcycleBottom = this.y + 20 // Account for motorcycle height from center
-    const targetY = terrainHeight - 20 // Where we want to be
+    const motorcycleBottom = this.y + 30 // Account for motorcycle height from center (proportionally larger)
+    const targetY = terrainHeight - 30 // Where we want to be (proportionally larger)
     
     // Check for terrain drop - if terrain is significantly below current position, let motorcycle fall naturally
     const terrainDropThreshold = 50 // pixels - adjust this to control sensitivity
@@ -486,15 +802,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       
       // Landing logic - no slow interpolation
       if (!this.isOnGround) {
-        // Landing from air - snap to terrain immediately
-        this.y = targetY
-      } else {
-        // Already on ground - follow terrain naturally without interpolation
-        this.y = targetY
-      }
-      
-      if (!this.isOnGround) {
-        // Just landed from being in air - check for crash
+        // Just landed from being in air - check for crash BEFORE positioning
         if (this.checkForCrash()) {
           // Crashed! Game over
           console.log("Snowboarder crashed on landing!")
@@ -504,7 +812,19 @@ export class Motorcycle extends Phaser.GameObjects.Container {
           return // Don't process normal landing
         }
         
+        // Landing from air - snap to terrain immediately (after crash check)
+        this.y = targetY
+      } else {
+        // Already on ground - follow terrain naturally without interpolation
+        this.y = targetY
+      }
+      
+      if (!this.isOnGround) {
+        
         this.isOnGround = true
+        
+        // Reset jump cooldown when landing to allow immediate next jump
+        this.lastJumpTime = 0
         
         // Absorb some vertical velocity on landing, keep horizontal momentum
         this.velocity.y *= 0.1 // Dampen vertical bounce
@@ -516,8 +836,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
         
         // Change back to normal image when landing and restore position/scale
         (this.riderSprite as any).setTexture('player');
-        this.riderSprite.setPosition(-10, 80); // Restore original position
-        this.riderSprite.setScale(0.18); // Restore original scale
+        this.riderSprite.setPosition(-10, 140); // Restore original position (adjusted for larger sprite)
+        this.riderSprite.setScale(0.32); // Restore original scale (proportionally larger)
         
         // Process trick combo on landing
         this.processLandingTricks()
@@ -722,6 +1042,149 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     this.backWheel.rotation += rotationSpeed * deltaTime / 1000
   }
 
+  private updateSnowTrail(): void {
+    if (!this.snowParticles) return
+
+    // Get the terrain height at player position for realistic snow pickup
+    let terrainHeight = GameSettings.level.groundY
+    if (this.levelGenerator) {
+      terrainHeight = this.getTerrainHeightFromChunks(this.x)
+    } else {
+      terrainHeight = this.terrain.getHeightAtX(this.x)
+    }
+
+    // Position particles at ground level where snow would be picked up
+    this.snowParticles.setPosition(this.x - 15, terrainHeight - 5)
+
+    // Only emit particles when on ground and moving
+    if (this.isOnGround && this.velocity.x > this.minSpeed * 0.7) {
+      // Start emitting if not already
+      if (!this.snowParticles.emitting) {
+        this.snowParticles.start()
+        console.log("Snow trail started")
+      }
+    } else {
+      // Stop emitting when airborne or moving too slowly
+      if (this.snowParticles.emitting) {
+        this.snowParticles.stop()
+        console.log("Snow trail stopped")
+      }
+    }
+  }
+
+  public startGrinding(rail: any): void {
+    console.log(`🔵 ENTERING startGrinding() method`)
+    console.log(`🔵 Current isGrinding state: ${this.isGrinding}`)
+    
+    if (this.isGrinding) {
+      console.log(`🔵 EARLY RETURN: Already grinding`)
+      return // Already grinding
+    }
+    
+    console.log(`🔵 PROCEEDING WITH GRIND START at rail (${rail.x.toFixed(0)}, ${rail.y.toFixed(0)})`)
+    
+    this.isGrinding = true
+    this.currentRail = rail
+    this.grindStartTime = Date.now()
+    this.grindScore = 0
+    this.lastScoreUpdate = Date.now() // Initialize scoring timer
+    
+    console.log(`🔵 STATE SET: isGrinding=${this.isGrinding}, currentRail set, startTime=${this.grindStartTime}`)
+    
+    // Immediately snap player to rail position
+    this.alignToRail()
+    console.log(`🔵 RAIL ALIGNMENT COMPLETE`)
+    
+    // Start grind particle effects
+    if (this.grindParticles) {
+      this.grindParticles.start()
+      console.log(`🔵 GRIND PARTICLES STARTED`)
+    }
+    
+    // Stop snow trail while grinding
+    if (this.snowParticles) {
+      this.snowParticles.stop()
+      console.log(`🔵 SNOW PARTICLES STOPPED`)
+    }
+    
+    if (this.onGrindStart) {
+      this.onGrindStart()
+      console.log(`🔵 GRIND START CALLBACK EXECUTED`)
+    }
+    
+    console.log(`🔵 startGrinding() COMPLETE - Final isGrinding state: ${this.isGrinding}`)
+  }
+
+  public stopGrinding(): void {
+    if (!this.isGrinding) return // Not grinding
+    
+    console.log(`🔴 STOPPING GRIND: Was grinding, now stopping`)
+    
+    const grindTime = (Date.now() - this.grindStartTime) / 1000 // Convert to seconds
+    const baseScore = Math.floor(grindTime * 200) // 200 points per second of grinding
+    this.grindScore = baseScore
+    
+    // Clear all grinding state
+    this.isGrinding = false
+    this.currentRail = null
+    this.lastScoreUpdate = 0
+    
+    // Important: Don't force isOnGround state - let physics determine this
+    // this.isOnGround will be determined by ground collision detection
+    
+    // Stop grind particle effects
+    if (this.grindParticles) {
+      this.grindParticles.stop()
+      console.log(`🔴 GRIND PARTICLES STOPPED`)
+    }
+    
+    console.log(`🔴 GRIND COMPLETE: Time: ${grindTime.toFixed(2)}s, Score: ${this.grindScore}, isGrinding now: ${this.isGrinding}`)
+    
+    if (this.onGrindEnd && grindTime > 0.2) { // Only report final score if significant grinding happened
+      this.onGrindEnd(grindTime, this.grindScore)
+    }
+  }
+
+  public checkRailGrinding(): void {
+    // This will be called from collision detection in GameScene
+    // If we're not already grinding and we're on a rail, start grinding
+    // If we're grinding but no longer on a rail, stop grinding
+  }
+
+  private lastScoreUpdate: number = 0
+
+  private updateGrindTrail(): void {
+    if (!this.grindParticles) return
+
+    // Position grind particles at player position when grinding
+    this.grindParticles.setPosition(this.x, this.y + 10) // Slightly below player
+
+    // CONTINUOUS SCORING: Add points while grinding instead of waiting for stop
+    if (this.isGrinding) {
+      const currentTime = Date.now()
+      const totalGrindTime = (currentTime - this.grindStartTime) / 1000
+      
+      // Award points every 0.1 seconds (100ms intervals)
+      if (currentTime - this.lastScoreUpdate >= 100) {
+        const pointsToAdd = 20 // 20 points per 0.1 second = 200 points per second
+        this.grindScore += pointsToAdd
+        this.lastScoreUpdate = currentTime
+        
+        // Update persistent grind display (no popup spam)
+        if (this.scene && (this.scene as any).scoreManager) {
+          const scoreManager = (this.scene as any).scoreManager
+          scoreManager.updateGrindDisplay(this.grindScore, totalGrindTime)
+          // Don't add to total score yet - that happens when grinding ends
+        }
+        
+        // Log occasionally to show scoring is working
+        if (Math.random() < 0.05) { // 5% chance to log
+          console.log(`🟡 GRIND SCORING: +${pointsToAdd} pts (total: ${this.grindScore}, time: ${totalGrindTime.toFixed(1)}s)`)
+        }
+      }
+    }
+  }
+
   public reset(x: number, y: number): void {
     this.x = x
     this.y = y
@@ -735,11 +1198,71 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     this.previousTerrainAngle = 0
     this.velocity.set(this.baseSpeed, 0) // Reset to base speed
     
+    // Reset grinding state
+    this.stopGrinding()
+    
     // Reset physics body position
-    if (this.body) {
-      this.scene.matter.body.setPosition(this.body, { x: this.x, y: this.y })
+    if (this.body && this.scene.matter && (this.scene.matter as any).Matter) {
+      const Matter = (this.scene.matter as any).Matter
+      Matter.Body.setPosition(this.body, { x: this.x, y: this.y })
     }
     
     console.log(`Snowboarder reset to position: ${x}, ${y}`)
+  }
+
+  private alignToRail(): void {
+    if (!this.currentRail) return
+    
+    // IMMEDIATE RAIL SNAP - No delays or complex calculations
+    const railRotation = this.currentRail.rotation || 0
+    const railCenterX = this.currentRail.x
+    const railCenterY = this.currentRail.y
+    const deltaX = this.x - railCenterX
+    
+    // Calculate Y position on rail surface
+    if (Math.abs(railRotation) > 0.01) {
+      // Angled rail - follow slope
+      const slopeY = deltaX * Math.tan(railRotation)
+      this.y = railCenterY + slopeY - 20
+    } else {
+      // Flat rail - fixed height
+      this.y = railCenterY - 20
+    }
+    
+    // Match rail rotation immediately
+    this.rotation = railRotation
+    
+    // Reset vertical velocity to prevent bouncing
+    this.velocity.y = 0
+    
+    // Ensure minimum forward speed
+    if (this.velocity.x < this.baseSpeed) {
+      this.velocity.x = this.baseSpeed
+    }
+    
+    // Update physics body position immediately
+    if (this.body && this.scene.matter && (this.scene.matter as any).Matter) {
+      const Matter = (this.scene.matter as any).Matter
+      Matter.Body.setPosition(this.body, { x: this.x, y: this.y + 30 }) // Proportionally larger offset
+    }
+    
+    console.log(`🔧 RAIL SNAP: Player aligned to rail at (${this.x.toFixed(0)}, ${this.y.toFixed(0)})`)
+  }
+
+  private maintainRailAlignment(): void {
+    if (!this.isGrinding || !this.currentRail) return
+    
+    // Just update grinding effects and check for rail end
+    // Let physics handle the actual rail collision naturally
+    
+    // Check if player has moved past the end of the rail
+    const railStartX = this.currentRail.x - 150 // Rail is 300px wide
+    const railEndX = this.currentRail.x + 150
+    
+    if (this.x < railStartX || this.x > railEndX) {
+      console.log("🔴 Reached end of rail - stopping grind")
+      this.stopGrinding()
+      return
+    }
   }
 }

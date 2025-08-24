@@ -1,6 +1,7 @@
 import GameSettings from "../config/GameSettings"
+import { Poolable } from "../systems/ObjectPool"
 
-export class Spike extends Phaser.GameObjects.Container {
+export class Spike extends Phaser.GameObjects.Container implements Poolable {
   public body!: MatterJS.Body
   private spikeGraphics!: Phaser.GameObjects.Graphics
 
@@ -21,7 +22,7 @@ export class Spike extends Phaser.GameObjects.Container {
     
     this.spikeGraphics = this.scene.add.graphics()
     this.spikeGraphics.fillStyle(0xFF4444) // Red color for danger
-    this.spikeGraphics.lineStyle(2, 0xAA2222) // Darker red outline
+    // Removed outline for cleaner appearance
     
     // Draw triangular spike shape
     this.spikeGraphics.beginPath()
@@ -31,12 +32,7 @@ export class Spike extends Phaser.GameObjects.Container {
     this.spikeGraphics.lineTo(width/2, height) // bottom right
     this.spikeGraphics.closePath()
     this.spikeGraphics.fillPath()
-    this.spikeGraphics.strokePath()
-    
-    // Add some detail lines
-    this.spikeGraphics.lineStyle(1, 0x662222)
-    this.spikeGraphics.lineBetween(-width/4, height * 0.7, 0, height * 0.3)
-    this.spikeGraphics.lineBetween(width/4, height * 0.7, 0, height * 0.3)
+    // Removed strokePath() and detail lines for cleaner appearance
     
     this.add(this.spikeGraphics)
   }
@@ -86,6 +82,21 @@ export class Spike extends Phaser.GameObjects.Container {
         this.setScale(1, 1)
       }
     })
+  }
+
+  public reset(x: number, y: number): void {
+    this.x = x
+    this.y = y
+    this.setScale(1, 1)
+    
+    // Reset physics body position
+    if (this.body && this.scene.matter && (this.scene.matter as any).Matter) {
+      const Matter = (this.scene.matter as any).Matter
+      Matter.Body.setPosition(this.body, { x, y })
+    }
+    
+    // Stop any active tweens
+    this.scene.tweens.killTweensOf(this)
   }
 
   public destroy(): void {

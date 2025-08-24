@@ -12,6 +12,7 @@ export class ScoreManager {
   private flipText!: Phaser.GameObjects.Text
   private controlsText!: Phaser.GameObjects.Text
   private turboText!: Phaser.GameObjects.Text
+  private grindText!: Phaser.GameObjects.Text
   
   // Game over screen elements
   private gameOverElements: Phaser.GameObjects.GameObject[] = []
@@ -86,6 +87,25 @@ export class ScoreManager {
     this.turboText.setDepth(1000)
     this.turboText.setScrollFactor(0) // Fixed to camera
     this.turboText.setVisible(false)
+    
+    // Persistent grind score display (hidden by default) - fixed to camera
+    this.grindText = this.scene.add.text(
+      GameSettings.canvas.width / 2,
+      GameSettings.canvas.height / 2 - 50,
+      'RAIL GRIND!\n+0',
+      {
+        fontSize: '28px',
+        color: '#FFD700',
+        fontFamily: 'Arial',
+        stroke: '#8B4513', // Brown stroke for rail theme
+        strokeThickness: 4,
+        align: 'center'
+      }
+    )
+    this.grindText.setOrigin(0.5)
+    this.grindText.setDepth(1001)
+    this.grindText.setScrollFactor(0) // Fixed to camera
+    this.grindText.setVisible(false)
   }
 
   private getScoreDisplayText(): string {
@@ -125,7 +145,7 @@ export class ScoreManager {
     }
     
     // Show bigger popup for bigger scores - fixed to camera
-    const fontSize = Math.min(48 + (totalScore / 100), 72)
+    const fontSize = Math.min(24 + (totalScore / 200), 36)
     const popup = this.scene.add.text(
       GameSettings.canvas.width / 2, 
       GameSettings.canvas.height / 2 - 50, 
@@ -170,13 +190,114 @@ export class ScoreManager {
     }
   }
 
+  public startGrindDisplay(): void {
+    this.grindText.setVisible(true)
+    this.grindText.setText('RAIL GRIND!\n+0')
+    this.grindText.setAlpha(1.0)
+    
+    // Add pulsing effect
+    this.scene.tweens.add({
+      targets: this.grindText,
+      scale: 1.1,
+      duration: 300,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    })
+  }
+  
+  public updateGrindDisplay(currentScore: number, grindTime: number): void {
+    if (this.grindText.visible) {
+      this.grindText.setText(`RAIL GRIND!\n${grindTime.toFixed(1)}s\n+${currentScore}`)
+    }
+  }
+  
+  public endGrindDisplay(finalScore: number, grindTime: number): void {
+    // Stop pulsing animation
+    this.scene.tweens.killTweensOf(this.grindText)
+    this.grindText.setScale(1.0)
+    
+    // Final score display with fade out
+    this.grindText.setText(`RAIL GRIND COMPLETE!\n${grindTime.toFixed(1)}s\n+${finalScore}`)
+    
+    this.scene.tweens.add({
+      targets: this.grindText,
+      y: this.grindText.y - 80,
+      alpha: 0,
+      scale: 1.4,
+      duration: 2000,
+      ease: 'Power2.easeOut',
+      onComplete: () => {
+        this.grindText.setVisible(false)
+        this.grindText.y = GameSettings.canvas.height / 2 - 50 // Reset position
+        this.grindText.setScale(1.0)
+      }
+    })
+    
+    // Add the score to the total
+    this.score += finalScore
+    this.updateUI()
+  }
+
+  public addGrindScore(grindScore: number, grindTime: number): void {
+    this.score += grindScore
+    this.updateUI()
+    
+    // Create grind bonus display
+    const grindText = `RAIL GRIND!\n${grindTime.toFixed(1)}s`
+    
+    // Show grind popup - fixed to camera
+    const popup = this.scene.add.text(
+      GameSettings.canvas.width / 2, 
+      GameSettings.canvas.height / 2 - 100, 
+      `${grindText}\n+${grindScore}`,
+      {
+        fontSize: '24px',
+        color: '#FFD700',
+        fontFamily: 'Arial',
+        stroke: '#8B4513', // Brown stroke for rail theme
+        strokeThickness: 4,
+        align: 'center'
+      }
+    )
+    popup.setOrigin(0.5)
+    popup.setDepth(1001)
+    popup.setScrollFactor(0) // Fixed to camera
+    
+    // Track this popup for cleanup
+    this.activePopups.push(popup)
+
+    // Animation for grind bonus
+    this.scene.tweens.add({
+      targets: popup,
+      y: popup.y - 80,
+      alpha: 0,
+      scale: 1.4,
+      duration: 1500,
+      ease: 'Power2.easeOut',
+      onComplete: () => {
+        // Remove from tracking array when destroyed
+        const index = this.activePopups.indexOf(popup)
+        if (index > -1) {
+          this.activePopups.splice(index, 1)
+        }
+        popup.destroy()
+      }
+    })
+    
+    // Mild screen shake for grind completion
+    if (grindTime > 1.0) {
+      this.scene.cameras.main.shake(150, 0.01)
+    }
+  }
+
   private showScorePopup(points: number, color: number, text: string): void {
     const popup = this.scene.add.text(
       GameSettings.canvas.width / 2, 
       GameSettings.canvas.height / 2 - 100, 
       text,
       {
-        fontSize: '36px',
+        fontSize: '24px',
         color: `#${color.toString(16).padStart(6, '0')}`,
         fontFamily: 'Arial',
         stroke: '#000000',
@@ -263,6 +384,14 @@ export class ScoreManager {
     
     // Clean up all floating popups (yellow score text, etc.)
     this.clearAllPopups()
+    
+    // Hide and reset grind display
+    if (this.grindText) {
+      this.scene.tweens.killTweensOf(this.grindText)
+      this.grindText.setVisible(false)
+      this.grindText.setScale(1.0)
+      this.grindText.y = GameSettings.canvas.height / 2 - 50
+    }
     
     this.updateUI()
   }
@@ -407,6 +536,9 @@ export class ScoreManager {
     }
     if (this.turboText) {
       this.turboText.destroy()
+    }
+    if (this.grindText) {
+      this.grindText.destroy()
     }
   }
 }

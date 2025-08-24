@@ -77,7 +77,7 @@ export class DynamicTerrain {
 
     // Draw terrain fill
     this.graphics.fillStyle(0x4a5d23) // Dark green
-    this.graphics.lineStyle(3, 0x7fb800) // Bright green outline
+    // Removed outline for cleaner appearance
     
     this.graphics.beginPath()
     this.graphics.moveTo(this.points[0].x, this.points[0].y)
@@ -94,7 +94,7 @@ export class DynamicTerrain {
     this.graphics.closePath()
     
     this.graphics.fillPath()
-    this.graphics.strokePath()
+    // Removed strokePath() for no outline
   }
 
   /**

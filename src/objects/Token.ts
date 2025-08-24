@@ -1,6 +1,7 @@
 import GameSettings from "../config/GameSettings"
+import { Poolable } from "../systems/ObjectPool"
 
-export class Token extends Phaser.GameObjects.Container {
+export class Token extends Phaser.GameObjects.Container implements Poolable {
   public body!: MatterJS.Body
   private tokenSprite!: Phaser.GameObjects.Arc
   private rotationSpeed: number = 180 // degrees per second
@@ -20,7 +21,7 @@ export class Token extends Phaser.GameObjects.Container {
   private createSprite(): void {
     // Create a coin-like circular token
     this.tokenSprite = this.scene.add.circle(0, 0, GameSettings.tokens.size, 0xFFD700) // Gold color
-    this.tokenSprite.setStrokeStyle(3, 0xFFA500) // Orange outline
+    // Removed outline for cleaner appearance
     
     // Add inner circle for detail
     const innerCircle = this.scene.add.circle(0, 0, GameSettings.tokens.size * 0.6, 0xFFFF00) // Bright yellow
@@ -71,13 +72,32 @@ export class Token extends Phaser.GameObjects.Container {
         if (this.onCollect) {
           this.onCollect(this)
         }
-        this.destroy()
+        // Don't destroy when using pooling - the pool will handle cleanup
       }
     })
   }
 
   public getValue(): number {
     return GameSettings.tokens.value
+  }
+
+  public reset(x: number, y: number): void {
+    this.x = x
+    this.y = y
+    this.isCollected = false
+    this.alpha = 1
+    this.scaleX = 1
+    this.scaleY = 1
+    this.rotation = 0
+    
+    // Reset physics body position
+    if (this.body && this.scene.matter && (this.scene.matter as any).Matter) {
+      const Matter = (this.scene.matter as any).Matter
+      Matter.Body.setPosition(this.body, { x, y })
+    }
+    
+    // Stop any active tweens
+    this.scene.tweens.killTweensOf(this)
   }
 
   public destroy(): void {

@@ -1,6 +1,7 @@
 import GameSettings from "../config/GameSettings"
+import { Poolable } from "../systems/ObjectPool"
 
-export class MovingPlatform extends Phaser.GameObjects.Container {
+export class MovingPlatform extends Phaser.GameObjects.Container implements Poolable {
   public body!: MatterJS.Body
   private platformSprite!: Phaser.GameObjects.Rectangle
   private startY: number
@@ -27,7 +28,7 @@ export class MovingPlatform extends Phaser.GameObjects.Container {
     
     // Main platform
     this.platformSprite = this.scene.add.rectangle(0, 0, width, height, 0x666666)
-    this.platformSprite.setStrokeStyle(2, 0x888888)
+    // Removed outline for cleaner appearance
     
     // Add some detail to make it look mechanical
     const leftSupport = this.scene.add.rectangle(-width/3, height/2 + 5, 8, 10, 0x444444)
@@ -55,12 +56,16 @@ export class MovingPlatform extends Phaser.GameObjects.Container {
     // Link to game object
     this.scene.matter.add.gameObject(this, this.body)
     
-    // Start moving up
-    const Matter = (this.scene.matter as any).Matter
-    Matter.Body.setVelocity(this.body, { x: 0, y: -this.moveSpeed * 0.01 })
+    // Start moving up - only if Matter is available
+    if (this.scene.matter && (this.scene.matter as any).Matter) {
+      const Matter = (this.scene.matter as any).Matter
+      Matter.Body.setVelocity(this.body, { x: 0, y: -this.moveSpeed * 0.01 })
+    }
   }
 
   public update(deltaTime: number): void {
+    if (!this.scene.matter || !(this.scene.matter as any).Matter) return
+    
     const Matter = (this.scene.matter as any).Matter
     
     // Elevator-style movement - only goes up
@@ -70,14 +75,34 @@ export class MovingPlatform extends Phaser.GameObjects.Container {
       
       // After a short delay, teleport back to start position
       this.scene.time.delayedCall(2000, () => {
-        Matter.Body.setPosition(this.body, { x: this.x, y: this.startY })
-        Matter.Body.setVelocity(this.body, { x: 0, y: -this.moveSpeed * 0.01 })
+        if (this.scene.matter && (this.scene.matter as any).Matter) {
+          Matter.Body.setPosition(this.body, { x: this.x, y: this.startY })
+          Matter.Body.setVelocity(this.body, { x: 0, y: -this.moveSpeed * 0.01 })
+        }
       })
     }
   }
 
   public getBody(): MatterJS.Body {
     return this.body
+  }
+
+  public reset(x: number, y: number, width?: number, height?: number, startX?: number, startY?: number, endX?: number, endY?: number): void {
+    this.x = x
+    this.y = y
+    this.startY = startY || y
+    this.targetY = endY || (y - GameSettings.level.platformHeight * 2)
+    this.direction = -1
+    
+    // Reset physics body position and velocity
+    if (this.body && this.scene.matter && (this.scene.matter as any).Matter) {
+      const Matter = (this.scene.matter as any).Matter
+      Matter.Body.setPosition(this.body, { x, y })
+      Matter.Body.setVelocity(this.body, { x: 0, y: -this.moveSpeed * 0.01 })
+    }
+    
+    // Clear any pending delayed calls
+    this.scene.time.removeAllEvents()
   }
 
   public destroy(): void {

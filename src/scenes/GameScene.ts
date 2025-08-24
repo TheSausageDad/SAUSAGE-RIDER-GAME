@@ -4,6 +4,8 @@ import { DynamicTerrain } from "../systems/DynamicTerrain"
 import { LevelGenerator } from "../systems/LevelGenerator"
 import { InputManager } from "../systems/InputManager"
 import { ScoreManager } from "../systems/ScoreManager"
+import { Rail } from "../objects/Rail"
+import { GameObjectPools } from "../systems/ObjectPool"
 
 export class GameScene extends Phaser.Scene {
   private motorcycle!: Motorcycle
@@ -11,6 +13,7 @@ export class GameScene extends Phaser.Scene {
   private levelGenerator!: LevelGenerator
   private inputManager!: InputManager
   private scoreManager!: ScoreManager
+  private objectPools!: GameObjectPools
   
   private camera!: Phaser.Cameras.Scene2D.Camera
   private gameState: 'playing' | 'gameOver' = 'playing'
@@ -24,11 +27,14 @@ export class GameScene extends Phaser.Scene {
 
   preload(): void {
     // Load player images
-    this.load.image('player', 'SausageSkiLeanin.png')
-    this.load.image('player_flipping', 'Flipping.png')
+    this.load.image('player', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Riding%20image-hkOurseDcYE6YvgDWvYoQ16cgzxM01.png?j9V4')
+    this.load.image('player_flipping', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Flipping-yCElSe7lSawCKvFuduGGAf9HmQ0O17.png?Ncwo')
   }
 
   create(): void {
+    // Create snow particle texture first
+    this.createSnowParticleTexture()
+    
     this.createGameObjects()
     this.setupCamera()
     this.setupManagers()
@@ -40,11 +46,14 @@ export class GameScene extends Phaser.Scene {
     // Create Alto's Odyssey style background
     this.createBackground()
     
+    // Create object pools for performance optimization
+    this.objectPools = new GameObjectPools(this)
+    
     // Create dynamic terrain
     this.terrain = new DynamicTerrain(this, GameSettings.level.groundY, GameSettings.canvas.width)
     
     // Create level generator for infinite terrain chunks
-    this.levelGenerator = new LevelGenerator(this)
+    this.levelGenerator = new LevelGenerator(this, this.objectPools)
 
     // Create motorcycle
     this.motorcycle = new Motorcycle(
@@ -81,6 +90,23 @@ export class GameScene extends Phaser.Scene {
       const totalScore = baseScore * multiplier
       this.scoreManager.addTrickScore(totalScore, tricks, multiplier)
     }
+
+    this.motorcycle.onGrindStart = () => {
+      console.log("Started grinding bonus!")
+      this.scoreManager.startGrindDisplay()
+    }
+
+    this.motorcycle.onGrindEnd = (grindTime: number, grindScore: number) => {
+      console.log(`Grind bonus completed! Time: ${grindTime.toFixed(2)}s, Score: ${grindScore}`)
+      this.scoreManager.endGrindDisplay(grindScore, grindTime)
+    }
+    
+    // DEBUG: Create a test rail that player should definitely hit
+    this.time.delayedCall(2000, () => {
+      console.log("🔴 Creating immediate test rail at player position!")
+      const testRail = new Rail(this, this.motorcycle.x + 100, this.motorcycle.y)
+      console.log(`🔴 Test rail created at (${this.motorcycle.x + 100}, ${this.motorcycle.y})`)
+    })
   }
 
   private createBackground(): void {
@@ -352,6 +378,16 @@ export class GameScene extends Phaser.Scene {
     console.log("Camera setup with smooth player following")
   }
 
+  private createSnowParticleTexture(): void {
+    // Create a simple white circle texture for snow particles
+    const graphics = this.add.graphics()
+    graphics.fillStyle(0xFFFFFF, 1)
+    graphics.fillCircle(3, 3, 3)
+    graphics.generateTexture('snow-particle', 6, 6)
+    graphics.destroy()
+    
+    console.log("Snow particle texture created")
+  }
 
   private setupManagers(): void {
     // Input manager for infinite runner
@@ -376,11 +412,115 @@ export class GameScene extends Phaser.Scene {
   }
 
   private setupCollisions(): void {
-    // Matter.js collision detection (kept for other potential collisions)
-    this.matter.world.on('collisionstart', () => {
-      if (this.gameState !== 'playing') return
-      // Reserved for future collision handling (terrain, obstacles, etc.)
-    })
+    console.log("🔧 Setting up collision detection for rails and tokens")
+    
+    // Set up collision event handlers for one-way platforms
+    this.matter.world.on('collisionstart', this.handleCollisionStart.bind(this))
+  }
+
+  private handleCollisionStart(event: any): void {
+    console.log("🔍 COLLISION EVENT:", event.pairs?.length || 0, "pairs detected")
+    
+    // DEBUG: Log ALL collision pairs to see what's actually colliding
+    if (event.pairs) {
+      for (let i = 0; i < event.pairs.length; i++) {
+        const pair = event.pairs[i]
+        console.log(`  Pair ${i}: ${pair.bodyA.label} vs ${pair.bodyB.label}`)
+      }
+    }
+    
+    for (const pair of event.pairs) {
+      const bodyA = pair.bodyA
+      const bodyB = pair.bodyB
+      
+      console.log("🔍 COLLISION PAIR:", bodyA.label, "vs", bodyB.label)
+      
+      // Check if this is a player-rail collision
+      let playerBody = null
+      let railBody = null
+      
+      if (bodyA.label === 'motorcycle' && bodyB.label === 'rail') {
+        playerBody = bodyA
+        railBody = bodyB
+        console.log("🔍 PLAYER-RAIL COLLISION DETECTED (A=player, B=rail)")
+      } else if (bodyB.label === 'motorcycle' && bodyA.label === 'rail') {
+        playerBody = bodyB
+        railBody = bodyA
+        console.log("🔍 PLAYER-RAIL COLLISION DETECTED (B=player, A=rail)")
+      }
+      
+      if (playerBody && railBody) {
+        const playerBottom = playerBody.position.y + 15 // Player's bottom edge (adjusted)
+        const railTop = railBody.position.y - 7 // Rail's top edge (adjusted)
+        const verticalDistance = playerBottom - railTop
+        
+        console.log("🔍 DETAILED RAIL COLLISION ANALYSIS:")
+        console.log("  - Rail isOneWayPlatform:", (railBody as any).isOneWayPlatform)
+        console.log("  - Rail isSensor before:", railBody.isSensor)
+        console.log("  - Player position:", playerBody.position.x.toFixed(0), playerBody.position.y.toFixed(0))
+        console.log("  - Rail position:", railBody.position.x.toFixed(0), railBody.position.y.toFixed(0))
+        console.log("  - Player velocity:", playerBody.velocity.x.toFixed(1), playerBody.velocity.y.toFixed(1))
+        console.log("  - Player bottom edge:", playerBottom.toFixed(1))
+        console.log("  - Rail top edge:", railTop.toFixed(1))
+        console.log("  - Vertical distance:", verticalDistance.toFixed(1))
+        console.log("  - Player above rail?", playerBottom < railTop)
+        console.log("  - Player below rail?", playerBottom > railTop + 10)
+        console.log("  - Player moving up?", playerBody.velocity.y < -50) // More strict upward check
+        console.log("  - Player moving down?", playerBody.velocity.y > 50) // Check for downward landing
+        
+        if ((railBody as any).isOneWayPlatform) {
+          // COMPREHENSIVE ONE-WAY COLLISION DEBUGGING
+          const playerVelY = playerBody.velocity.y
+          const playerPosY = playerBody.position.y
+          const railPosY = railBody.position.y
+          const isMovingDown = playerVelY > 10 // Player falling/landing (positive Y = down)
+          const isMovingUp = playerVelY < -10 // Player jumping up (negative Y = up)
+          const isPlayerAboveRail = playerPosY < railPosY // Player center above rail center
+          const verticalDistance = Math.abs(playerPosY - railPosY)
+          
+          console.log("🔍 COMPREHENSIVE ONE-WAY COLLISION ANALYSIS:")
+          console.log("  - Player Y pos:", playerPosY.toFixed(1))
+          console.log("  - Rail Y pos:", railPosY.toFixed(1))
+          console.log("  - Player velocity Y:", playerVelY.toFixed(1))
+          console.log("  - Vertical distance:", verticalDistance.toFixed(1))
+          console.log("  - Player above rail?", isPlayerAboveRail)
+          console.log("  - Moving down (falling)?", isMovingDown, "(vel > 10)")
+          console.log("  - Moving up (jumping)?", isMovingUp, "(vel < -10)")
+          console.log("  - Rail current isSensor:", railBody.isSensor)
+          
+          // DECISION MATRIX
+          if (isMovingDown && isPlayerAboveRail) {
+            // Case 1: Player falling down from above - should land on rail
+            railBody.isSensor = false
+            console.log("🟢 CASE 1: LANDING - Rail made SOLID (player falling from above)")
+          } else if (isMovingUp) {
+            // Case 2: Player jumping up - should pass through rail
+            railBody.isSensor = true
+            console.log("🟡 CASE 2: JUMPING UP - Rail made SENSOR (player jumping up)")
+            
+            // Restore to solid after jump passes through
+            setTimeout(() => {
+              if (railBody && railBody.isSensor) {
+                railBody.isSensor = false
+                console.log("🔄 Post-jump: Rail restored to solid")
+              }
+            }, 150)
+          } else if (!isPlayerAboveRail && !isMovingUp) {
+            // Case 3: Player below rail moving horizontally - should pass through
+            railBody.isSensor = true
+            console.log("🟡 CASE 3: BELOW RAIL - Rail made SENSOR (player below rail)")
+          } else {
+            // Case 4: Default/unclear situation
+            const shouldBeSolid = isPlayerAboveRail
+            railBody.isSensor = !shouldBeSolid
+            console.log(`🟠 CASE 4: DEFAULT - Rail made ${shouldBeSolid ? 'SOLID' : 'SENSOR'} (player above: ${isPlayerAboveRail})`)
+          }
+          
+          console.log("  - Rail final state: isSensor =", railBody.isSensor)
+          console.log("  - Expected result:", railBody.isSensor ? "PASS THROUGH" : "SOLID COLLISION")
+        }
+      }
+    }
   }
 
   private startGame(): void {
@@ -399,7 +539,7 @@ export class GameScene extends Phaser.Scene {
     // Reset level generator for infinite terrain first
     if (this.levelGenerator) {
       this.levelGenerator.destroy()
-      this.levelGenerator = new LevelGenerator(this)
+      this.levelGenerator = new LevelGenerator(this, this.objectPools)
     }
     
     // Reset motorcycle and update its level generator reference
@@ -436,12 +576,119 @@ export class GameScene extends Phaser.Scene {
       // Manual token collection check (since Matter.js sensor events aren't working)
       this.checkTokenCollisions()
       
+      // Manual rail collision check
+      this.checkRailCollisions()
+      
       this.scoreManager.update()
     }
   }
 
 
   private collisionCheckCounter: number = 0
+
+  private checkRailCollisions(): void {
+    const motorcycleX = this.motorcycle.x
+    const motorcycleY = this.motorcycle.y
+    const collisionRadius = 60 // Large radius for easy testing
+    const collisionRadiusSquared = collisionRadius * collisionRadius
+    
+    // Get all rails from level generator
+    const rails = this.levelGenerator.getRails()
+    
+    // DEBUG: Always show rail status
+    if (rails.length > 0) {
+      const railPositions = rails.map((r, i) => `Rail${i}:(${r.x.toFixed(0)},${r.y.toFixed(0)})`).join(' ')
+      console.log(`🔍 RAIL STATUS: ${rails.length} rails, Player:(${motorcycleX.toFixed(0)},${motorcycleY.toFixed(0)}) ${railPositions}`)
+    } else {
+      console.log(`🔍 NO RAILS FOUND - Player:(${motorcycleX.toFixed(0)},${motorcycleY.toFixed(0)})`)
+    }
+    
+    let isCurrentlyOnRail = false
+    
+    // Check each rail for grinding collision - SIMPLIFIED FOR PERFORMANCE
+    for (let i = 0; i < rails.length; i++) {
+      const rail = rails[i]
+      const dx = rail.x - motorcycleX
+      const dy = rail.y - motorcycleY
+      const horizontalDistance = Math.abs(dx)
+      const verticalDistance = Math.abs(dy)
+      
+      // Player's vertical position relative to rail (negative = above rail)
+      const verticalOffset = motorcycleY - rail.y
+      const playerVelY = this.motorcycle.body?.velocity?.y || 0
+      
+      // EXTREMELY GENEROUS thresholds for debugging
+      const horizontalThreshold = 200 // Very wide detection
+      const verticalThreshold = 150   // Very tall detection
+      
+      // SIMPLIFIED RAIL DETECTION: One clear method
+      const withinHorizontalRange = horizontalDistance <= horizontalThreshold
+      const withinVerticalRange = verticalDistance <= verticalThreshold
+      
+      // Re-enable velocity check with reasonable limits after velocity fix
+      const reasonableVelocity = Math.abs(this.motorcycle.getVelocity().x) < 1500 // 50% over GameSettings maxSpeed
+      const validForGrinding = Math.abs(verticalOffset) <= 200 && reasonableVelocity
+      
+      // DEBUG: Show all detection attempts for rails we're close to
+      if (horizontalDistance <= 150) { // Show if we're reasonably close
+        console.log(`🔍 RAIL ${i} CHECK: H:${horizontalDistance.toFixed(1)}/${horizontalThreshold}=${withinHorizontalRange} V:${verticalDistance.toFixed(1)}/${verticalThreshold}=${withinVerticalRange} vel:${this.motorcycle.getVelocity().x.toFixed(1)} reasonable:${reasonableVelocity} validGrind:${validForGrinding}`)
+        if (!validForGrinding) {
+          console.log(`  - Invalid because: offset=${Math.abs(verticalOffset).toFixed(1)}>200? ${Math.abs(verticalOffset) > 200} vel=${this.motorcycle.getVelocity().x.toFixed(1)}>1500? ${!reasonableVelocity}`)
+        }
+      }
+      
+      // IMPROVED: Simple but reliable rail detection
+      if (withinHorizontalRange && withinVerticalRange && validForGrinding) {
+        console.log(`🟢 RAIL CONTACT: Player touching rail ${i}`)
+        isCurrentlyOnRail = true
+        
+        // Start grinding if not already grinding
+        if (!this.motorcycle.isGrinding) {
+          console.log(`🟢 STARTING GRIND on rail ${i}`)
+          this.motorcycle.startGrinding(rail)
+        } else if (this.motorcycle.currentRail !== rail) {
+          // Switch to new rail if we're already grinding a different one
+          console.log(`🟢 SWITCHING RAILS from rail to rail ${i}`)
+          this.motorcycle.stopGrinding()
+          this.motorcycle.startGrinding(rail)
+        }
+        break // Only grind one rail at a time
+      }
+    }
+    
+    // STICKY RAIL GRINDING: Only stop if player manually jumps or goes WAY off rail
+    if (!isCurrentlyOnRail && this.motorcycle.isGrinding) {
+      // Check if player is still within reasonable range of their current rail
+      if (this.motorcycle.currentRail) {
+        const railDx = Math.abs(this.motorcycle.x - this.motorcycle.currentRail.x)
+        const railWidth = 300 // Rail is 300px wide
+        const railHalfWidth = railWidth / 2
+        
+        // MUCH MORE LENIENT: Only stop if player is REALLY far from the rail
+        const veryFarFromRail = railDx > railHalfWidth + 100 // 100px buffer beyond rail edge
+        
+        // Check grind duration but be more lenient
+        const grindDuration = Date.now() - (this.motorcycle as any).grindStartTime
+        const hasBeenGrindingAWhile = grindDuration > 200 // 200ms minimum
+        
+        // Only stop if player is very far AND has been grinding for a reasonable time
+        if (veryFarFromRail && hasBeenGrindingAWhile) {
+          console.log(`🔴 RAIL FAR EXIT: Player very far from rail (${railDx.toFixed(1)} > ${railHalfWidth + 100}) after ${grindDuration}ms`)
+          this.motorcycle.stopGrinding()
+        } else {
+          // Keep grinding - player is still close enough to the rail
+          if (Math.random() < 0.1) { // 10% chance to log
+            console.log(`🟡 STAYING ON RAIL: distance:${railDx.toFixed(1)}/${railHalfWidth + 100} duration:${grindDuration}ms`)
+          }
+        }
+      } else {
+        console.log("🔴 Manual grind end - no current rail")
+        this.motorcycle.stopGrinding()
+      }
+    }
+    
+    console.log("🔍 RAIL CHECK END - isCurrentlyOnRail:", isCurrentlyOnRail)
+  }
 
   private checkTokenCollisions(): void {
     // Only check collisions every 5 frames to improve performance
@@ -477,6 +724,11 @@ export class GameScene extends Phaser.Scene {
       if (distanceSquared <= collectionRadiusSquared) {
         token.collect()
         this.scoreManager.addToken()
+        
+        // Return collected token to pool and remove from level generator
+        this.objectPools.tokenPool.release(token)
+        this.levelGenerator.removeToken(token)
+        
         break // Only collect one token per frame to reduce processing
       }
     }

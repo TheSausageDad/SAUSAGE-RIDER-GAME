@@ -10,13 +10,23 @@ An endless runner snowboarding game inspired by Alto's Odyssey, featuring realis
 - **Improved Physics**: Better acceleration, friction, and hill climbing mechanics
 - **Visual Enhancements**: Color-coded terrain types and atmospheric mountain backgrounds
 
+## Latest Session Updates (Current Build)
+- **Rail Grinding System Overhaul**: Complete rail grinding implementation with smooth continuous scoring
+- **Improved Jump Mechanics**: Forgiving jump system with 300ms cooldown to prevent double jumping  
+- **Player Size Enhancement**: 75% larger player sprite (0.18 → 0.32 scale) with proportional collision body
+- **Velocity Control System**: Fixed extreme velocity bugs with proper acceleration capping and limits
+- **Rail Frequency Rebalancing**: Reduced rail spawning from 22% to 8% chance (5% flat + 3% downhill rails)
+- **Debug Visual Management**: Clean gameplay with debug hitboxes disabled, collision outline available on demand
+- **Persistent Grind Scoring**: Single rising score display during rail grinding instead of popup spam
+
 ## Core Systems Architecture
 
 ### 1. Player Character (`src/objects/Motorcycle.ts`)
 **High-Speed Snowboarder with Enhanced Physics**
 
 - **Visual Design**: Sausage character sprite (`SausageSkiLeanin.png`) with flipping animation (`Flipping.png`)
-- **Physics Engine**: Matter.js integration with custom momentum system
+- **Enhanced Visual Scale**: 75% larger sprite (0.32 scale) with proportional collision body (22px radius)
+- **Physics Engine**: Matter.js integration with custom momentum system and velocity control
 - **Enhanced Movement System**:
   - Base speed: 400px/s on flat ground (increased from 300px/s)
   - Maximum speed: 2800px/s (increased from 600px/s)
@@ -38,14 +48,14 @@ const slopeInfluence = Math.sin(terrainAngle) * this.slopeInfluence // 1.2 influ
 - **Downhill Bonuses**: Up to 400 extra speed on steep downhills
 - **Speed Limits**: Up to 3300px/s on epic downhills (reasonable but exciting)
 
-**Jump System**:
-- **Ground Detection**: 3-tier system for different scenarios
+**Enhanced Jump System**:
+- **Forgiving Ground Detection**: Dual detection system for rolling hills
   - `isOnGround`: Basic physics flag
-  - `canJumpFromGround()`: Forgiving jump detection (30-120px threshold)
-  - `isTrulyAirborne()`: Strict airborne check (15px clearance)
-- **Enhanced Jump Power**: 1000 (increased from 350)
+  - `canJumpFromGround()`: Forgiving detection (50-120px threshold based on slope)
+  - `isTrulyAirborne()`: Strict airborne check (30px clearance)
+- **Anti-Double Jump**: 300ms cooldown prevents air jumping while allowing rapid ground jumps
+- **Jump Power**: 1000 (increased from 350) with speed-based scaling
 - **Momentum Launches**: Speed converts to jump power on upward ramps
-- **Hill Top Bonuses**: Extra jump power and forgiveness on downward slopes
 
 **Spin System**:
 - Continuous 360°/second rotation while input held
@@ -61,15 +71,15 @@ const slopeInfluence = Math.sin(terrainAngle) * this.slopeInfluence // 1.2 influ
 - Automatic cleanup of chunks behind camera
 - Extended terrain features spanning multiple chunks
 
-**New Exciting Terrain Types** (with spawn rates):
+**Rebalanced Terrain Types** (with updated spawn rates):
 ```typescript
 if (terrainType < 0.35) createEpicDownhill()    // 35% - Epic 4-8 chunk downhills (400-1000px deep)
 else if (terrainType < 0.55) createSteepUphill() // 20% - Challenging 3-6 chunk uphills (250-550px up)
 else if (terrainType < 0.68) createMiniSlopes()  // 13% - Quick 1-2 chunk elevation changes (±100px)
 else if (terrainType < 0.8) createDramaticHills() // 12% - 3-5 chunk dramatic rolling terrain
-else if (terrainType < 0.92) createMassiveJump() // 12% - 2-3 chunk massive jump ramps (220-400px buildup)
-else if (terrainType < 0.97) createSpeedValley() // 5% - 2-4 chunk deep speed valleys (200-500px deep)
-else createExtendedFlat()                        // 3% - 1 chunk flat sections (minimal)
+else if (terrainType < 0.95) createRailFlat()    // 5% - RARE flat rail grinding sections (2-3 chunks)
+else if (terrainType < 0.98) createRailDownhill() // 3% - VERY RARE downhill rails (3-4 chunks)
+else createExtendedFlat()                        // 2% - 1 chunk flat sections (minimal)
 ```
 
 **Terrain Features**:
@@ -77,8 +87,8 @@ else createExtendedFlat()                        // 3% - 1 chunk flat sections (
 - **Steep Uphills**: Challenging climbs that test momentum retention
 - **Mini Slopes**: Quick elevation changes with multiple small bumps
 - **Dramatic Hills**: Complex multi-wave terrain with large elevation changes
-- **Massive Jumps**: Big ramps with perfect launch angles for huge air
-- **Speed Valleys**: Deep dips designed for maximum momentum building
+- **Rail Grinding**: RARE special terrain blocks with guaranteed rail spawning (8% total)
+- **Extended Flat**: Minimal breathing room sections
 
 **Color-Coded Visual System**:
 - **Orange**: Epic downhills (speed focus)
@@ -108,7 +118,33 @@ else createExtendedFlat()                        // 3% - 1 chunk flat sections (
   - Hold while airborne → Continuous spinning
   - Release while airborne → Auto-correction if upside down
 
-### 4. Scoring System (`src/systems/ScoreManager.ts`)
+### 4. Rail Grinding System (`src/objects/Rail.ts` & `src/objects/Motorcycle.ts`)
+**Smooth Continuous Rail Grinding Mechanics**
+
+**Rail Detection System**:
+- **Distance-based detection**: 200px horizontal, 150px vertical range
+- **Velocity validation**: Speed under 1500px/s for stable grinding
+- **Anti-clustering system**: 5-7 chunk cooldowns prevent consecutive rails
+- **Dual physics**: Sensor-based collision + distance verification
+
+**Grinding Physics**:
+- **Sticky rail movement**: Player follows rail slope and angle
+- **Momentum preservation**: Maintains horizontal speed during grind
+- **Clean exit system**: 300ms jump cooldown + `justJumpedOffRail` flag
+- **Boundary detection**: Lenient 80px buffer for smooth grinding
+
+**Visual Feedback**:
+- **Persistent score display**: Single rising score text (not popup spam)
+- **Gold spark particles**: 8 sparks every 10ms during grinding
+- **Real-time updates**: Shows time and accumulated score
+- **Smooth completion**: Elegant fade-out animation with final total
+
+**Scoring System**:
+- **Continuous points**: 20 points per 0.1 second (200 points/second)
+- **No spam popups**: Score accumulates in single display
+- **Final total**: Added to player score when grind completes
+
+### 5. Scoring System (`src/systems/ScoreManager.ts`)
 **Comprehensive Trick and Combo System**
 
 **Scoring Breakdown**:
@@ -124,7 +160,7 @@ else createExtendedFlat()                        // 3% - 1 chunk flat sections (
 - Control hints (bottom)
 - Trick combo popups (center screen)
 
-### 5. Game Scene (`src/scenes/GameScene.ts`)
+### 6. Game Scene (`src/scenes/GameScene.ts`)
 **Main Game Orchestration with Optimized Backgrounds**
 
 **Performance-Optimized Parallax Mountain Background**:
@@ -257,6 +293,52 @@ if (isUpwardRamp && hasSpeed && significantRamp) {
   const launchPower = speedBonus * this.momentumMultiplier * 400
 }
 ```
+
+## Latest Technical Improvements
+
+### Rail Grinding System Implementation
+**Problem**: Complex rail detection and grinding mechanics needed implementation
+**Solution**: 
+- Implemented distance-based detection with velocity validation
+- Created sticky rail physics with slope following
+- Added persistent score display system with real-time updates
+- Implemented anti-clustering system (5-7 chunk cooldowns)
+- Result: Smooth, rewarding rail grinding with clean visual feedback
+
+### Jump System Enhancement  
+**Problem**: Players couldn't jump reliably on rolling hills, double jumping was possible
+**Solution**:
+- Enhanced ground detection with forgiving thresholds (50-120px based on slope)
+- Added 300ms jump cooldown to prevent double jumping
+- Dual detection system (strict + forgiving) for better rolling hill support
+- Result: Responsive jumping that works on all terrain types without exploits
+
+### Player Visibility & Collision Improvement
+**Problem**: Player sprite too small and poorly aligned with collision detection
+**Solution**:
+- Increased player scale from 0.18 to 0.32 (75% larger)
+- Enlarged collision body from 15px to 22px radius proportionally
+- Adjusted all positioning offsets from 20px to 30px consistently
+- Updated all state transitions to maintain proper scaling
+- Result: More visible player with accurate collision alignment
+
+### Velocity Control & Physics Stability
+**Problem**: Extreme velocities (25000px/s) causing physics explosions and rail detection failures
+**Solution**:
+- Added acceleration capping (max 0.8 per frame) to prevent velocity spikes
+- Implemented dynamic velocity limits based on game settings (1080px/s max normal)
+- Enhanced velocity validation for rail detection (1500px/s threshold)
+- Added comprehensive velocity debugging and monitoring
+- Result: Stable physics with predictable speed ranges
+
+### Visual & Debug Management
+**Problem**: Debug hitboxes cluttering gameplay, inconsistent visual presentation
+**Solution**:
+- Disabled all debug visuals by default for clean gameplay
+- Implemented on-demand collision outline system for debugging
+- Removed testing mode forced rail spawning
+- Organized debug systems for easy enable/disable
+- Result: Professional visual presentation with debugging capabilities available
 
 ## Performance Improvements & Optimizations
 

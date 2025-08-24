@@ -2,6 +2,8 @@ import GameSettings from "../config/GameSettings"
 import { Token } from "../objects/Token"
 import { Spike } from "../objects/Spike"
 import { MovingPlatform } from "../objects/MovingPlatform"
+import { Rail } from "../objects/Rail"
+import { GameObjectPools } from "./ObjectPool"
 
 export interface LevelChunk {
   x: number
@@ -11,11 +13,13 @@ export interface LevelChunk {
   tokens: Token[]
   spikes: Spike[]
   platforms: MovingPlatform[]
+  rails: Rail[]
   terrainPath: { x: number, y: number }[] // Store terrain points for smooth physics
 }
 
 export class LevelGenerator {
   private scene: Phaser.Scene
+  private objectPools: GameObjectPools
   private chunks: LevelChunk[] = []
   private nextChunkX: number = 0
   private chunkPool: LevelChunk[] = []
@@ -24,12 +28,15 @@ export class LevelGenerator {
   
   // Extended terrain generation state
   private currentTerrainType: string | null = null
+  private previousTerrainType: string | null = null // Track previous terrain to avoid rail clustering
+  private railCooldown: number = 0 // Prevent multiple rail chunks in succession
   private terrainProgress: number = 0
   private terrainLength: number = 0
   private targetHeight: number = GameSettings.level.groundY
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, objectPools: GameObjectPools) {
     this.scene = scene
+    this.objectPools = objectPools
     this.generateInitialChunks()
   }
 
@@ -38,11 +45,19 @@ export class LevelGenerator {
     this.lastChunkEndHeight = GameSettings.level.groundY - 500 // Start 500px above ground level
     this.lastChunkEndAngle = 0
     
+    // PREVENT RAILS AT START: Set a long rail cooldown to ensure no rails spawn at beginning
+    this.railCooldown = 10 // 10 chunks before any rails can spawn
+    
+    console.log("🏁 GENERATING INITIAL CHUNKS... (rails prevented for first 10 chunks)")
+    
     // Generate multiple starting downhill chunks for long epic descent
     this.generateChunk(0, true) // First downhill chunk
     this.generateChunk(this.nextChunkX, true) // Second downhill chunk
     this.generateChunk(this.nextChunkX, true) // Third downhill chunk
     this.generateChunk(this.nextChunkX, true) // Fourth downhill chunk
+    
+    // Continue with normal terrain generation
+    this.generateChunk(this.nextChunkX, false)
     
     // Generate several more chunks ahead normally
     for (let i = 4; i < 8; i++) {
@@ -51,6 +66,7 @@ export class LevelGenerator {
   }
 
   private generateChunk(x: number, isStarting: boolean = false): LevelChunk {
+    console.log(`🟦 GENERATING CHUNK at x=${x}, isStarting=${isStarting}`)
     const chunkWidth = GameSettings.level.chunkWidth
     const chunk: LevelChunk = {
       x,
@@ -60,6 +76,7 @@ export class LevelGenerator {
       tokens: [],
       spikes: [],
       platforms: [],
+      rails: [],
       terrainPath: []
     }
 
@@ -75,7 +92,15 @@ export class LevelGenerator {
     if (!isStarting) {
       this.addObstacles(chunk)
       this.addTokens(chunk)
+      
+      // Rails are now only spawned on dedicated rail terrain chunks (no forced spawning)
     }
+    
+    // Rails are now only spawned on dedicated rail terrain chunks
+    // this.addRails(chunk) - Disabled random rail spawning
+    
+    // Debug: Add visual hitboxes for all game objects in this chunk (DISABLED for clean gameplay)
+    // this.addDebugHitboxes(chunk)
 
     this.chunks.push(chunk)
     this.nextChunkX = x + chunkWidth
@@ -123,7 +148,7 @@ export class LevelGenerator {
     this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
     
     // Create the epic starting downhill terrain
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, 50, 0x32CD32) // Bright green for epic downhill
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // Bright green for epic downhill
     
     console.log(`Created epic starting downhill chunk ${chunkIndex}: ${startHeight.toFixed(0)} -> ${endHeight.toFixed(0)}`)
   }
@@ -148,7 +173,7 @@ export class LevelGenerator {
     // Visual ground using solid snow white
     const groundGraphics = this.scene.add.graphics()
     groundGraphics.fillStyle(0xF8F8FF, 1.0) // Solid snow white
-    groundGraphics.lineStyle(4, 0xE6E6FA, 0.8) // Light lavender outline
+    // Removed outline for cleaner appearance
     groundGraphics.beginPath()
     groundGraphics.moveTo(x, startHeight)
     groundGraphics.lineTo(x + width, endHeight)
@@ -156,7 +181,7 @@ export class LevelGenerator {
     groundGraphics.lineTo(x, GameSettings.canvas.height)
     groundGraphics.closePath()
     groundGraphics.fillPath()
-    groundGraphics.strokePath()
+    // Removed strokePath() for no outline
     groundGraphics.setDepth(-1)
     
     // Create physics body that matches the visual exactly
@@ -200,43 +225,85 @@ export class LevelGenerator {
   private startNewExtendedTerrain(chunk: LevelChunk, x: number, width: number): void {
     const terrainType = Math.random()
     
-    if (terrainType < 0.35) {
-      // Epic long downhills (4-8 chunks) - for massive speed building
+    console.log(`🌄 NEW TERRAIN: Random value ${terrainType.toFixed(3)} at chunk x:${x.toFixed(0)}, railCooldown: ${this.railCooldown}`)
+    
+    if (terrainType < 0.30) {
+      // Epic long downhills (4-8 chunks) - for massive speed building - 30%
       this.currentTerrainType = 'epic_downhill'
       this.terrainLength = 4 + Math.floor(Math.random() * 5) // 4-8 chunks (very long downhills)
       this.targetHeight = this.lastChunkEndHeight + 400 + Math.random() * 600 // Go down 400-1000px total (very deep)
       this.targetHeight = Math.min(this.targetHeight, GameSettings.level.groundY + 600) // Allow very deep downhills
+      console.log(`🌄 SELECTED: epic_downhill terrain (${this.terrainLength} chunks)`)
     } else if (terrainType < 0.55) {
-      // Steep challenging uphills (3-6 chunks) - more exciting climbs
+      // Steep challenging uphills (3-6 chunks) - more exciting climbs - 25%
       this.currentTerrainType = 'steep_uphill'
       this.terrainLength = 3 + Math.floor(Math.random() * 4) // 3-6 chunks (longer uphills)
       this.targetHeight = this.lastChunkEndHeight - 250 - Math.random() * 300 // Go up 250-550px total (steeper)
       this.targetHeight = Math.max(this.targetHeight, GameSettings.level.groundY - 500) // Allow higher peaks
+      console.log(`🌄 SELECTED: steep_uphill terrain (${this.terrainLength} chunks)`)
     } else if (terrainType < 0.68) {
-      // Varied mini slopes (1-2 chunks) - quick elevation changes
+      // Dramatic hills with multiple elevation changes (3-5 chunks) - 13%
+      this.currentTerrainType = 'dramatic_hills'
+      this.terrainLength = 3 + Math.floor(Math.random() * 3) // 3-5 chunks for complex terrain
+      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 400 // ±200px variation
+      console.log(`🌄 SELECTED: dramatic_hills terrain (${this.terrainLength} chunks)`)
+    } else if (terrainType < 0.78) {
+      // Mini slopes (1-2 chunks) - quick elevation changes - 10%
       this.currentTerrainType = 'mini_slopes'
       this.terrainLength = 1 + Math.floor(Math.random() * 2) // 1-2 chunks (quick changes)
       this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 200 // ±100px changes
-    } else if (terrainType < 0.8) {
-      // Dramatic rolling terrain (3-5 chunks) - bigger hills and valleys
-      this.currentTerrainType = 'dramatic_hills'
-      this.terrainLength = 3 + Math.floor(Math.random() * 3) // 3-5 chunks
-      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.4) * 300 // Slight downward bias but bigger changes
-    } else if (terrainType < 0.92) {
-      // Massive jump ramps (2-3 chunks) - bigger air opportunities
+      console.log(`🌄 SELECTED: mini_slopes terrain (${this.terrainLength} chunks)`)
+    } else if (terrainType < 0.85) {
+      // Massive jumps (2-3 chunks) - big air opportunities - 7%
       this.currentTerrainType = 'massive_jump'
-      this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for bigger ramps
-      this.targetHeight = this.lastChunkEndHeight - 220 - Math.random() * 180 // Build up 220-400px for massive jumps
-    } else if (terrainType < 0.97) {
-      // Speed valleys (2-4 chunks) - deep dips for momentum
+      this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for big jumps
+      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 300 // ±150px variation with ramps
+      console.log(`🌄 SELECTED: massive_jump terrain (${this.terrainLength} chunks)`)
+    } else if (terrainType < 0.90) {
+      // Speed valleys (2-4 chunks) - momentum building dips - 5%
       this.currentTerrainType = 'speed_valley'
-      this.terrainLength = 2 + Math.floor(Math.random() * 3) // 2-4 chunks
-      this.targetHeight = this.lastChunkEndHeight + 200 + Math.random() * 300 // Deep valleys for speed
+      this.terrainLength = 2 + Math.floor(Math.random() * 3) // 2-4 chunks for extended valleys
+      this.targetHeight = this.lastChunkEndHeight + 200 + Math.random() * 200 // Go down 200-400px for speed building
+      console.log(`🌄 SELECTED: speed_valley terrain (${this.terrainLength} chunks)`)
+    } else if (terrainType < 0.95) {
+      // Rail grinding flat (2-3 chunks) - RARE (5% chance)
+      if (this.railCooldown > 0 || this.previousTerrainType === 'rail_flat' || this.previousTerrainType === 'rail_downhill') {
+        console.log(`🚫 RAIL ANTI-CLUSTER: Skipping rail_flat (cooldown: ${this.railCooldown}, previous: ${this.previousTerrainType})`)
+        // Force different terrain instead
+        this.currentTerrainType = 'dramatic_hills'
+        this.terrainLength = 3 + Math.floor(Math.random() * 3)
+        this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 400
+        console.log(`🌄 ANTI-CLUSTER SELECTED: dramatic_hills terrain (${this.terrainLength} chunks)`)
+      } else {
+        this.currentTerrainType = 'rail_flat'
+        this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for extended grinding
+        this.targetHeight = this.lastChunkEndHeight // Keep perfectly flat
+        this.railCooldown = 5 + Math.floor(Math.random() * 3) // 5-7 chunk cooldown (much longer)
+        console.log(`🚂 SELECTED: rail_flat terrain (${this.terrainLength} chunks) - RARE! Cooldown set to ${this.railCooldown}`)
+      }
+    } else if (terrainType < 0.98) {
+      // Rail grinding downhill (3-4 chunks) - VERY RARE (3% chance)
+      if (this.railCooldown > 0 || this.previousTerrainType === 'rail_flat' || this.previousTerrainType === 'rail_downhill') {
+        console.log(`🚫 RAIL ANTI-CLUSTER: Skipping rail_downhill (cooldown: ${this.railCooldown}, previous: ${this.previousTerrainType})`)
+        // Force a different terrain type - pick epic downhill instead  
+        this.currentTerrainType = 'epic_downhill'
+        this.terrainLength = 4 + Math.floor(Math.random() * 5) // 4-8 chunks
+        this.targetHeight = this.lastChunkEndHeight + 400 + Math.random() * 600 // Big downhill
+        console.log(`🌄 ANTI-CLUSTER SELECTED: epic_downhill terrain (${this.terrainLength} chunks)`)
+      } else {
+        // Normal rail_downhill selection
+        this.currentTerrainType = 'rail_downhill'
+        this.terrainLength = 3 + Math.floor(Math.random() * 2) // 3-4 chunks for extended grinding (900-1200px)
+        this.targetHeight = this.lastChunkEndHeight + 150 + Math.random() * 150 // Gentle 150-300px downhill for speed
+        this.railCooldown = 6 + Math.floor(Math.random() * 3) // 6-8 chunk cooldown (very long)
+        console.log(`🚂 SELECTED: rail_downhill terrain (${this.terrainLength} chunks) - VERY RARE! Cooldown set to ${this.railCooldown}`)
+      }
     } else {
-      // Minimal flat sections (1 chunk only) - just for breathing room
+      // Extended flat sections (1 chunk) - minimal breathing room
       this.currentTerrainType = 'extended_flat'
-      this.terrainLength = 1 // Only 1 chunk of flat
-      this.targetHeight = this.lastChunkEndHeight // Stay at current height
+      this.terrainLength = 1 // Just 1 chunk for brief flat sections
+      this.targetHeight = this.lastChunkEndHeight // Keep current height
+      console.log(`🌄 SELECTED: extended_flat terrain (${this.terrainLength} chunks)`)
     }
     
     this.terrainProgress = 0
@@ -255,6 +322,12 @@ export class LevelGenerator {
       case 'steep_uphill':
         this.createSteepUphill(chunk, x, width, progress)
         break
+      case 'rail_flat':
+        this.createRailFlat(chunk, x, width, progress)
+        break
+      case 'rail_downhill':
+        this.createRailDownhill(chunk, x, width, progress)
+        break
       case 'mini_slopes':
         this.createMiniSlopes(chunk, x, width, progress)
         break
@@ -268,7 +341,7 @@ export class LevelGenerator {
         this.createSpeedValley(chunk, x, width, progress)
         break
       case 'extended_flat':
-        this.createExtendedFlat(chunk, x, width, progress)
+        this.createExtendedFlat(chunk, x, width)
         break
       // Keep old terrain types for compatibility
       case 'extended_downhill':
@@ -290,9 +363,16 @@ export class LevelGenerator {
     
     // Check if we've completed this terrain feature
     if (this.terrainProgress >= this.terrainLength - 1) {
+      this.previousTerrainType = this.currentTerrainType // Store previous terrain type
       this.currentTerrainType = null
       this.terrainProgress = 0
       this.terrainLength = 0
+      
+      // Decrement rail cooldown (minimum 0)
+      if (this.railCooldown > 0) {
+        this.railCooldown--
+        console.log(`🕒 Rail cooldown decremented to ${this.railCooldown}`)
+      }
     }
   }
 
@@ -325,7 +405,7 @@ export class LevelGenerator {
     this.lastChunkEndHeight = endHeight
     this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, 50, 0x9ACD32) // Yellow-green for downhills
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // Yellow-green for downhills
   }
 
   private createExtendedUphill(chunk: LevelChunk, x: number, width: number, progress: number): void {
@@ -356,7 +436,7 @@ export class LevelGenerator {
     this.lastChunkEndHeight = endHeight
     this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, 50, 0x4682B4) // Steel blue for uphills
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // Snow white for consistent appearance
   }
 
 
@@ -391,12 +471,65 @@ export class LevelGenerator {
     this.lastChunkEndHeight = endHeight
     this.lastChunkEndAngle = Math.atan2(pathPoints[pathPoints.length - 1].y - pathPoints[pathPoints.length - 2].y, width / numPoints)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, 50, 0xB0E0E6) // Light blue for rolling hills
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0xB0E0E6) // Light blue for rolling hills
   }
 
-  private createExtendedFlat(chunk: LevelChunk, x: number, width: number, progress: number): void {
+  private createExtendedFlat(chunk: LevelChunk, x: number, width: number): void {
     // Simple flat ground for breathing room
     this.createFlatGround(chunk, x, width)
+  }
+
+  private createRailFlat(chunk: LevelChunk, x: number, width: number, progress: number): void {
+    // Perfect flat terrain specifically designed for rail grinding
+    const startHeight = this.lastChunkEndHeight
+    const pathPoints = []
+    const numPoints = 15 // Fewer points for perfectly straight flat sections
+    
+    // Create completely flat terrain
+    for (let i = 0; i <= numPoints; i++) {
+      const localProgress = i / numPoints
+      const pointX = x + (width * localProgress)
+      pathPoints.push({ x: pointX, y: startHeight })
+    }
+    
+    // Update tracking - stay at same height
+    this.lastChunkEndHeight = startHeight
+    this.lastChunkEndAngle = 0 // Completely flat
+    
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0x9C27B0) // Purple for rail grinding areas
+    
+    // ALWAYS spawn a rail on rail-specific flat terrain
+    this.guaranteeRailSpawn(chunk)
+  }
+
+  private createRailDownhill(chunk: LevelChunk, x: number, width: number, progress: number): void {
+    // Gentle downhill specifically designed for fast rail grinding
+    const startHeight = this.lastChunkEndHeight
+    const smoothProgress = this.easeInOutQuad(progress)
+    const endHeight = startHeight + (this.targetHeight - startHeight) * smoothProgress
+    
+    const pathPoints = []
+    const numPoints = 20
+    
+    // Create smooth, gentle downhill perfect for maintaining speed on rails
+    for (let i = 0; i <= numPoints; i++) {
+      const localProgress = i / numPoints
+      const pointX = x + (width * localProgress)
+      
+      // Very gentle curve - almost straight but with slight downward slope
+      const curveProgress = localProgress * localProgress * (3 - 2 * localProgress) // Smooth S-curve
+      const pointY = startHeight + (endHeight - startHeight) * curveProgress
+      pathPoints.push({ x: pointX, y: pointY })
+    }
+    
+    // Update tracking
+    this.lastChunkEndHeight = endHeight
+    this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
+    
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0xFF9800) // Orange for rail downhill areas
+    
+    // ALWAYS spawn a rail on rail-specific downhill terrain
+    this.guaranteeRailSpawn(chunk)
   }
 
   private createJumpRamp(chunk: LevelChunk, x: number, width: number, progress: number): void {
@@ -424,7 +557,7 @@ export class LevelGenerator {
     this.lastChunkEndHeight = endHeight
     this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, 50, 0x6495ED) // Cornflower blue for ramps
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // Snow white for consistent appearance
   }
 
   private easeInOutQuad(t: number): number {
@@ -467,7 +600,7 @@ export class LevelGenerator {
     this.lastChunkEndHeight = endHeight
     this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, 50, 0xFF6B35) // Orange for epic speed
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0xFF6B35) // Orange for epic speed
   }
 
   private createSteepUphill(chunk: LevelChunk, x: number, width: number, progress: number): void {
@@ -501,7 +634,7 @@ export class LevelGenerator {
     this.lastChunkEndHeight = endHeight
     this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, 50, 0xFF1744) // Red for challenging uphills
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0xFF1744) // Red for challenging uphills
   }
 
   private createMiniSlopes(chunk: LevelChunk, x: number, width: number, progress: number): void {
@@ -529,7 +662,7 @@ export class LevelGenerator {
     this.lastChunkEndHeight = endHeight
     this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, 50, 0x8BC34A) // Light green for mini slopes
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0x8BC34A) // Light green for mini slopes
   }
 
   private createDramaticHills(chunk: LevelChunk, x: number, width: number, progress: number): void {
@@ -562,7 +695,7 @@ export class LevelGenerator {
     this.lastChunkEndHeight = endHeight
     this.lastChunkEndAngle = Math.atan2(pathPoints[pathPoints.length - 1].y - pathPoints[pathPoints.length - 2].y, width / numPoints)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, 50, 0x9C27B0) // Purple for dramatic terrain
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0x9C27B0) // Purple for dramatic terrain
   }
 
   private createMassiveJump(chunk: LevelChunk, x: number, width: number, progress: number): void {
@@ -602,7 +735,7 @@ export class LevelGenerator {
     this.lastChunkEndHeight = pathPoints[pathPoints.length - 1].y
     this.lastChunkEndAngle = Math.atan2(pathPoints[pathPoints.length - 1].y - pathPoints[pathPoints.length - 2].y, width / numPoints)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, 50, 0x00BCD4) // Cyan for massive jumps
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0x00BCD4) // Cyan for massive jumps
   }
 
   private createSpeedValley(chunk: LevelChunk, x: number, width: number, progress: number): void {
@@ -637,216 +770,49 @@ export class LevelGenerator {
     this.lastChunkEndHeight = endHeight
     this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, 50, 0xFFEB3B) // Yellow for speed valleys
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0xFFEB3B) // Yellow for speed valleys
   }
 
-  private createGradualDownhill(chunk: LevelChunk, x: number, width: number): void {
-    const groundHeight = 50
-    const startHeight = this.lastChunkEndHeight
-    
-    // Create a gentle downhill slope for natural speed building
-    const downhillAmount = 60 + Math.random() * 40 // 60-100 pixel descent
-    const endHeight = Math.min(GameSettings.level.groundY + 50, startHeight + downhillAmount)
-    
-    // Create smooth downhill path
-    const pathPoints = []
-    const numPoints = 25
-    
-    for (let i = 0; i <= numPoints; i++) {
-      const progress = i / numPoints
-      const pointX = x + (width * progress)
-      
-      // Gentle curved descent - starts flat then gradually slopes down
-      let curveProgress = progress
-      if (progress < 0.3) {
-        // Start almost flat for natural feel
-        curveProgress = progress * 0.2
-      } else {
-        // Then gentle acceleration into the slope
-        curveProgress = 0.06 + ((progress - 0.3) / 0.7) * 0.94
-      }
-      
-      const pointY = startHeight + (endHeight - startHeight) * curveProgress
-      pathPoints.push({ x: pointX, y: pointY })
-    }
-    
-    // Update tracking for next chunk
-    this.lastChunkEndHeight = endHeight
-    this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
-    
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, groundHeight, 0x9ACD32) // Yellow-green for speed sections
-  }
 
-  private createFlowingSlope(chunk: LevelChunk, x: number, width: number): void {
-    const groundHeight = 50
-    const startHeight = this.lastChunkEndHeight
-    const slopeDirection = Math.random() > 0.5 ? 1 : -1 // Up or down
-    const maxElevationChange = 120 * slopeDirection
-    const endHeight = Math.max(GameSettings.level.groundY - 150, Math.min(GameSettings.level.groundY + 50, startHeight + maxElevationChange))
-    
-    // Create smooth flowing slope that connects properly
-    const pathPoints = []
-    const numPoints = 30
-    
-    for (let i = 0; i <= numPoints; i++) {
-      const progress = i / numPoints
-      const pointX = x + (width * progress)
-      
-      // Smooth interpolation from start to end height
-      const smoothProgress = 3 * progress * progress - 2 * progress * progress * progress
-      const pointY = startHeight + (endHeight - startHeight) * smoothProgress
-      
-      pathPoints.push({ x: pointX, y: pointY })
-    }
-    
-    // Update tracking for next chunk
-    this.lastChunkEndHeight = endHeight
-    this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
-    
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, groundHeight, 0xB0E0E6)
-  }
 
-  private createFlowingHill(chunk: LevelChunk, x: number, width: number): void {
-    const groundHeight = 50
-    const startHeight = this.lastChunkEndHeight
-    const hillHeight = 150
-    
-    // Create flowing hill that connects to previous chunk
-    const pathPoints = []
-    const numPoints = 40
-    
-    for (let i = 0; i <= numPoints; i++) {
-      const progress = i / numPoints
-      const pointX = x + (width * progress)
-      
-      // Bell curve for hill shape, starting and ending at proper heights
-      const bellCurve = Math.exp(-Math.pow((progress - 0.5) * 4, 2))
-      const hillOffset = -hillHeight * bellCurve
-      
-      // Blend hill with proper start/end heights
-      let baseHeight = startHeight
-      if (progress > 0.8) {
-        // Transition back toward ground level at the end
-        const transitionProgress = (progress - 0.8) / 0.2
-        baseHeight = startHeight + (GameSettings.level.groundY - startHeight) * transitionProgress
-      }
-      
-      const pointY = baseHeight + hillOffset
-      pathPoints.push({ x: pointX, y: pointY })
-    }
-    
-    // Update tracking for next chunk
-    const endHeight = pathPoints[pathPoints.length - 1].y
-    this.lastChunkEndHeight = endHeight
-    this.lastChunkEndAngle = Math.atan2(pathPoints[pathPoints.length - 1].y - pathPoints[pathPoints.length - 2].y, width / numPoints)
-    
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, groundHeight, 0x87CEEB)
-  }
 
-  private createFlowingValley(chunk: LevelChunk, x: number, width: number): void {
-    const groundHeight = 50
-    const startHeight = this.lastChunkEndHeight
-    const valleyDepth = 100
-    
-    // Create flowing valley that connects properly
-    const pathPoints = []
-    const numPoints = 35
-    
-    for (let i = 0; i <= numPoints; i++) {
-      const progress = i / numPoints
-      const pointX = x + (width * progress)
-      
-      // Inverted bell curve for valley, starting from previous chunk height
-      const bellCurve = Math.exp(-Math.pow((progress - 0.5) * 3, 2))
-      const valleyOffset = valleyDepth * bellCurve
-      
-      // Create smooth transition into and out of valley
-      let baseHeight = startHeight
-      if (progress > 0.7) {
-        // Transition back toward ground level at the end
-        const transitionProgress = (progress - 0.7) / 0.3
-        baseHeight = startHeight + (GameSettings.level.groundY - startHeight) * transitionProgress
-      }
-      
-      const pointY = baseHeight + valleyOffset
-      pathPoints.push({ x: pointX, y: pointY })
-    }
-    
-    // Update tracking for next chunk
-    const endHeight = pathPoints[pathPoints.length - 1].y
-    this.lastChunkEndHeight = endHeight
-    this.lastChunkEndAngle = Math.atan2(pathPoints[pathPoints.length - 1].y - pathPoints[pathPoints.length - 2].y, width / numPoints)
-    
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, groundHeight, 0x4682B4)
-  }
 
-  private createBigJump(chunk: LevelChunk, x: number, width: number): void {
-    const groundHeight = 50
-    const startHeight = this.lastChunkEndHeight
-    const jumpHeight = 200
-    
-    // Create a big ramp for jumping that connects properly
-    const pathPoints = []
-    const numPoints = 25
-    
-    for (let i = 0; i <= numPoints; i++) {
-      const progress = i / numPoints
-      const pointX = x + (width * progress)
-      
-      let pointY = startHeight
-      
-      if (progress < 0.3) {
-        // Gentle approach from previous chunk height
-        const approachProgress = progress / 0.3
-        pointY = startHeight - (jumpHeight * 0.1 * approachProgress)
-      } else if (progress < 0.7) {
-        // Steep ramp
-        const rampProgress = (progress - 0.3) / 0.4
-        pointY = startHeight - jumpHeight * 0.1 - (jumpHeight * 0.9 * rampProgress)
-      } else {
-        // Launch point - flat or slight decline
-        const launchProgress = (progress - 0.7) / 0.3
-        pointY = startHeight - jumpHeight + (jumpHeight * 0.3 * launchProgress)
-      }
-      
-      pathPoints.push({ x: pointX, y: pointY })
-    }
-    
-    // Update tracking for next chunk (after a big jump, return closer to ground level)
-    const endHeight = pathPoints[pathPoints.length - 1].y
-    this.lastChunkEndHeight = Math.max(endHeight, GameSettings.level.groundY - 50)
-    this.lastChunkEndAngle = Math.atan2(pathPoints[pathPoints.length - 1].y - pathPoints[pathPoints.length - 2].y, width / numPoints)
-    
-    this.createSmoothTerrain(chunk, pathPoints, x, width, GameSettings.level.groundY, groundHeight, 0x6495ED)
-  }
 
-  private createSmoothTerrain(chunk: LevelChunk, pathPoints: {x: number, y: number}[], x: number, width: number, groundY: number, groundHeight: number, color: number): void {
+  private createSmoothTerrain(chunk: LevelChunk, pathPoints: {x: number, y: number}[], x: number, width: number): void {
     // Smooth the path points for more natural curves
     const smoothedPoints = this.smoothPath(pathPoints)
     chunk.terrainPath = smoothedPoints
     
-    // Visual terrain with solid snow white color
+    // Enhanced visual terrain with detailed snow appearance
     const terrain = this.scene.add.graphics()
-    const fillColor = 0xF8F8FF // Snow white for all terrain
     
-    terrain.fillStyle(fillColor, 1.0) // Solid opaque snow white
-    terrain.lineStyle(4, color, 0.8) // Colored outline for terrain variety
+    // Create gradient from bright snow white to slightly blue-tinted snow
+    const topSnowColor = 0xFFFAFA // Very light snow white
+    const bottomSnowColor = 0xF0F8FF // Alice blue (very subtle blue tint)
+    
+    // Main terrain with gradient fill
+    terrain.fillGradientStyle(topSnowColor, topSnowColor, bottomSnowColor, bottomSnowColor, 1, 1, 1, 1)
     
     terrain.beginPath()
     terrain.moveTo(smoothedPoints[0].x, smoothedPoints[0].y)
     
-    // Draw smooth curves using lineTo (Phaser Graphics doesn't have quadraticCurveTo)
+    // Draw smooth curves
     for (let i = 1; i < smoothedPoints.length; i++) {
       terrain.lineTo(smoothedPoints[i].x, smoothedPoints[i].y)
     }
     
-    // Complete the shape by filling below terrain (adequate depth for downhill terrain)
-    const bottomY = Math.max(...smoothedPoints.map(p => p.y)) + 400 // Extend 400px below terrain for deep downhills
+    // Complete the shape
+    const bottomY = Math.max(...smoothedPoints.map(p => p.y)) + 400
     terrain.lineTo(x + width, bottomY)
     terrain.lineTo(x, bottomY)
     terrain.closePath()
     terrain.fillPath()
-    terrain.strokePath()
+    
+    // Add snow texture details
+    this.addSnowTexture(terrain, smoothedPoints, x, width)
+    
+    // Add subtle snow drifts and patterns
+    this.addSnowDetails(terrain, smoothedPoints, x, width)
     
     // Set proper depth so terrain stays behind player but in front of background
     terrain.setDepth(-1)
@@ -909,60 +875,14 @@ export class LevelGenerator {
   }
 
 
-  private createGapWithPlatforms(chunk: LevelChunk, x: number, width: number): void {
-    const platformWidth = 100
-    const gapWidth = width - (platformWidth * 2)
-    const groundY = GameSettings.level.groundY
-    
-    // Create terrain path with gap
-    chunk.terrainPath = [
-      { x: x, y: groundY },
-      { x: x + platformWidth, y: groundY },
-      { x: x + width - platformWidth, y: groundY },
-      { x: x + width, y: groundY }
-    ]
-    
-    // Start platform
-    const startPlatform = this.scene.add.rectangle(
-      x + platformWidth / 2,
-      groundY + 25,
-      platformWidth,
-      50,
-      0x444444
-    )
-    startPlatform.setStrokeStyle(2, 0x666666)
-    this.scene.matter.add.gameObject(startPlatform, { isStatic: true })
-    chunk.ground.push(startPlatform)
-    
-    // End platform
-    const endPlatform = this.scene.add.rectangle(
-      x + width - platformWidth / 2,
-      groundY + 25,
-      platformWidth,
-      50,
-      0x444444
-    )
-    endPlatform.setStrokeStyle(2, 0x666666)
-    this.scene.matter.add.gameObject(endPlatform, { isStatic: true })
-    chunk.ground.push(endPlatform)
-    
-    // Optional moving platform in the gap
-    if (Math.random() < 0.7) {
-      const platform = new MovingPlatform(
-        this.scene,
-        x + platformWidth + gapWidth / 2,
-        groundY - 100
-      )
-      chunk.platforms.push(platform)
-    }
-  }
 
   private addObstacles(chunk: LevelChunk): void {
-    if (Math.random() < GameSettings.obstacles.spawnRate) {
-      const spikeX = chunk.x + Math.random() * (chunk.width - GameSettings.obstacles.spikeWidth)
-      const spike = new Spike(this.scene, spikeX, GameSettings.level.groundY - GameSettings.obstacles.spikeHeight)
-      chunk.spikes.push(spike)
-    }
+    // Spikes disabled - no obstacles will spawn
+    // if (Math.random() < GameSettings.obstacles.spawnRate) {
+    //   const spikeX = chunk.x + Math.random() * (chunk.width - GameSettings.obstacles.spikeWidth)
+    //   const spike = this.objectPools.spikePool.get(spikeX, GameSettings.level.groundY - GameSettings.obstacles.spikeHeight)
+    //   chunk.spikes.push(spike)
+    // }
   }
 
   private addTokens(chunk: LevelChunk): void {
@@ -1000,7 +920,7 @@ export class LevelGenerator {
       const terrainHeight = this.getTerrainHeightAtX(tokenX, chunk)
       const tokenY = terrainHeight - 40 // Much closer to ground for easy collection
       
-      const token = new Token(this.scene, tokenX, tokenY)
+      const token = this.objectPools.tokenPool.get(tokenX, tokenY)
       chunk.tokens.push(token)
     }
   }
@@ -1023,7 +943,7 @@ export class LevelGenerator {
       const arcProgress = 4 * progress * (1 - progress) // Parabola: peaks at 0.5
       const tokenY = baseHeight - 50 - (arcHeight * arcProgress * 0.5) // Half height, closer to ground
       
-      const token = new Token(this.scene, tokenX, tokenY)
+      const token = this.objectPools.tokenPool.get(tokenX, tokenY)
       chunk.tokens.push(token)
     }
   }
@@ -1056,7 +976,7 @@ export class LevelGenerator {
       // Only place tokens that are close to ground for easy collection
       const groundAtX = this.getTerrainHeightAtX(tokenX, chunk)
       if (tokenY < groundAtX - 20) { // Much closer to ground
-        const token = new Token(this.scene, tokenX, tokenY)
+        const token = this.objectPools.tokenPool.get(tokenX, tokenY)
         chunk.tokens.push(token)
       }
     }
@@ -1113,13 +1033,16 @@ export class LevelGenerator {
           try { ramp.destroy() } catch (error) { console.error("Ramp destroy error:", error) }
         })
         chunk.tokens.forEach(token => {
-          try { token.destroy() } catch (error) { console.error("Token destroy error:", error) }
+          try { this.objectPools.tokenPool.release(token) } catch (error) { console.error("Token release error:", error) }
         })
         chunk.spikes.forEach(spike => {
-          try { spike.destroy() } catch (error) { console.error("Spike destroy error:", error) }
+          try { this.objectPools.spikePool.release(spike) } catch (error) { console.error("Spike release error:", error) }
         })
         chunk.platforms.forEach(platform => {
-          try { platform.destroy() } catch (error) { console.error("Platform destroy error:", error) }
+          try { this.objectPools.platformPool.release(platform) } catch (error) { console.error("Platform release error:", error) }
+        })
+        chunk.rails.forEach(rail => {
+          try { this.objectPools.railPool.release(rail) } catch (error) { console.error("Rail release error:", error) }
         })
         return false
       }
@@ -1143,6 +1066,56 @@ export class LevelGenerator {
     return tokens
   }
 
+  public removeToken(token: Token): void {
+    this.chunks.forEach(chunk => {
+      const index = chunk.tokens.indexOf(token)
+      if (index > -1) {
+        chunk.tokens.splice(index, 1)
+      }
+    })
+  }
+
+  private guaranteeRailSpawn(chunk: LevelChunk): void {
+    // This method ensures a rail is ALWAYS spawned on dedicated rail terrain
+    if (!chunk.terrainPath || chunk.terrainPath.length < 2) {
+      console.log("No terrain path available for guaranteed rail spawn")
+      return
+    }
+
+    // Find the optimal position for the rail (middle section of the chunk)
+    const midIndex = Math.floor(chunk.terrainPath.length / 2)
+    const railPosition = chunk.terrainPath[midIndex]
+    
+    // Position rail higher so players must jump to grind
+    const railX = railPosition.x
+    const railY = railPosition.y - 50 // Place 50px above terrain - requires jump to reach
+    
+    const rail = this.objectPools.railPool.get(railX, railY)
+    
+    // Match rail rotation to terrain angle for natural placement
+    let railRotation = 0
+    if (midIndex > 0) {
+      const prevPoint = chunk.terrainPath[midIndex - 1]
+      const nextPoint = chunk.terrainPath[Math.min(midIndex + 1, chunk.terrainPath.length - 1)]
+      
+      // Calculate slope angle from surrounding terrain points
+      railRotation = Math.atan2(nextPoint.y - prevPoint.y, nextPoint.x - prevPoint.x)
+      rail.rotation = railRotation
+      
+      console.log(`📐 RAIL ROTATION CALC:`)
+      console.log(`  - PrevPoint: (${prevPoint.x.toFixed(0)}, ${prevPoint.y.toFixed(0)})`)
+      console.log(`  - RailPoint: (${railPosition.x.toFixed(0)}, ${railPosition.y.toFixed(0)})`)
+      console.log(`  - NextPoint: (${nextPoint.x.toFixed(0)}, ${nextPoint.y.toFixed(0)})`)
+      console.log(`  - Calculated rotation: ${railRotation.toFixed(3)} radians (${(railRotation * 180 / Math.PI).toFixed(1)} degrees)`)
+    }
+    
+    chunk.rails.push(rail)
+    
+    console.log(`🟣 GUARANTEED RAIL spawned at (${railX.toFixed(0)}, ${railY.toFixed(0)}) with rotation ${railRotation.toFixed(3)}`)
+    console.log(`🟣 RAIL DETAILS: centerX=${railX} centerY=${railY} rotation=${railRotation.toFixed(3)} terrainAngle=${(railRotation * 180 / Math.PI).toFixed(1)}°`)
+    console.log(`🟣 RAIL ADDED TO CHUNK: Total rails in game: ${this.getRails().length}`)
+  }
+
   public getSpikes(): Spike[] {
     const spikes: Spike[] = []
     this.chunks.forEach(chunk => {
@@ -1159,9 +1132,110 @@ export class LevelGenerator {
     return platforms
   }
 
+  public getRails(): Rail[] {
+    const rails: Rail[] = []
+    this.chunks.forEach(chunk => {
+      rails.push(...chunk.rails)
+    })
+    return rails
+  }
+
   public getChunks(): LevelChunk[] {
     return [...this.chunks]
   }
+
+  private addDebugHitboxes(chunk: LevelChunk): void {
+    // Show all hitboxes with different colors for each object type
+    
+    // 1. TOKENS - Yellow circles
+    chunk.tokens.forEach(token => {
+      const tokenHitbox = this.scene.add.graphics()
+      tokenHitbox.lineStyle(2, 0xFFFF00, 0.8) // Bright yellow
+      tokenHitbox.fillStyle(0xFFFF00, 0.1) // Semi-transparent yellow fill
+      tokenHitbox.strokeCircle(token.x, token.y, 15) // Token radius
+      tokenHitbox.fillCircle(token.x, token.y, 15)
+      
+      const tokenLabel = this.scene.add.text(token.x, token.y - 25, 'TOKEN', {
+        fontSize: '8px',
+        color: '#FFFF00',
+        backgroundColor: '#000000'
+      })
+      tokenLabel.setOrigin(0.5, 0.5)
+    })
+    
+    // 2. SPIKES - Red rectangles  
+    chunk.spikes.forEach(spike => {
+      const spikeHitbox = this.scene.add.graphics()
+      spikeHitbox.lineStyle(2, 0xFF0000, 0.8) // Bright red
+      spikeHitbox.fillStyle(0xFF0000, 0.15) // Semi-transparent red fill
+      spikeHitbox.strokeRect(spike.x - 15, spike.y - 15, 30, 30) // Spike size
+      spikeHitbox.fillRect(spike.x - 15, spike.y - 15, 30, 30)
+      
+      const spikeLabel = this.scene.add.text(spike.x, spike.y - 30, 'SPIKE', {
+        fontSize: '8px',
+        color: '#FF0000',
+        backgroundColor: '#000000'
+      })
+      spikeLabel.setOrigin(0.5, 0.5)
+    })
+    
+    // 3. MOVING PLATFORMS - Purple rectangles
+    chunk.platforms.forEach(platform => {
+      const platformHitbox = this.scene.add.graphics()
+      platformHitbox.lineStyle(2, 0xFF00FF, 0.8) // Magenta
+      platformHitbox.fillStyle(0xFF00FF, 0.1) // Semi-transparent magenta fill
+      platformHitbox.strokeRect(platform.x - 50, platform.y - 10, 100, 20) // Platform size
+      platformHitbox.fillRect(platform.x - 50, platform.y - 10, 100, 20)
+      
+      const platformLabel = this.scene.add.text(platform.x, platform.y - 25, 'PLATFORM', {
+        fontSize: '8px',
+        color: '#FF00FF',
+        backgroundColor: '#000000'
+      })
+      platformLabel.setOrigin(0.5, 0.5)
+    })
+    
+    // 4. RAILS - Already have green/cyan outlines, but add extra info
+    chunk.rails.forEach((rail, index) => {
+      // Rails already have debug visuals, just add extra info
+      const railInfoLabel = this.scene.add.text(rail.x, rail.y - 50, `RAIL ${index}\\n300x15px`, {
+        fontSize: '10px',
+        color: '#00FF00',
+        backgroundColor: '#000000',
+        align: 'center'
+      })
+      railInfoLabel.setOrigin(0.5, 0.5)
+    })
+    
+    // 5. TERRAIN PHYSICS BODIES - Blue outlines (if they exist)
+    if (chunk.terrainPath && chunk.terrainPath.length > 1) {
+      const terrainHitbox = this.scene.add.graphics()
+      terrainHitbox.lineStyle(1, 0x0080FF, 0.6) // Blue
+      
+      // Draw terrain collision outline
+      terrainHitbox.beginPath()
+      terrainHitbox.moveTo(chunk.terrainPath[0].x, chunk.terrainPath[0].y)
+      
+      for (let i = 1; i < chunk.terrainPath.length; i++) {
+        terrainHitbox.lineTo(chunk.terrainPath[i].x, chunk.terrainPath[i].y)
+      }
+      
+      terrainHitbox.strokePath()
+      
+      // Add terrain label
+      const midPoint = chunk.terrainPath[Math.floor(chunk.terrainPath.length / 2)]
+      const terrainLabel = this.scene.add.text(midPoint.x, midPoint.y - 20, 'TERRAIN', {
+        fontSize: '8px',
+        color: '#0080FF',
+        backgroundColor: '#000000'
+      })
+      terrainLabel.setOrigin(0.5, 0.5)
+    }
+    
+    console.log(`🎯 DEBUG HITBOXES: Added for chunk with ${chunk.tokens.length} tokens, ${chunk.spikes.length} spikes, ${chunk.platforms.length} platforms, ${chunk.rails.length} rails`)
+  }
+
+
 
   public destroy(): void {
     this.chunks.forEach(chunk => {
@@ -1181,15 +1255,81 @@ export class LevelGenerator {
         try { ramp.destroy() } catch (error) { console.error("Ramp destroy error in main destroy:", error) }
       })
       chunk.tokens.forEach(token => {
-        try { token.destroy() } catch (error) { console.error("Token destroy error in main destroy:", error) }
+        try { this.objectPools.tokenPool.release(token) } catch (error) { console.error("Token release error in main destroy:", error) }
       })
       chunk.spikes.forEach(spike => {
-        try { spike.destroy() } catch (error) { console.error("Spike destroy error in main destroy:", error) }
+        try { this.objectPools.spikePool.release(spike) } catch (error) { console.error("Spike release error in main destroy:", error) }
       })
       chunk.platforms.forEach(platform => {
-        try { platform.destroy() } catch (error) { console.error("Platform destroy error in main destroy:", error) }
+        try { this.objectPools.platformPool.release(platform) } catch (error) { console.error("Platform release error in main destroy:", error) }
+      })
+      chunk.rails.forEach(rail => {
+        try { this.objectPools.railPool.release(rail) } catch (error) { console.error("Rail release error in main destroy:", error) }
       })
     })
     this.chunks = []
   }
+
+  private addSnowTexture(terrain: Phaser.GameObjects.Graphics, smoothedPoints: {x: number, y: number}[], x: number, width: number): void {
+    // Add subtle snow sparkles and texture
+    terrain.fillStyle(0xFFFFFF, 0.3) // Semi-transparent white sparkles
+    
+    for (let i = 0; i < 15; i++) {
+      const sparkleX = x + (Math.random() * width)
+      const sparkleY = this.getHeightAtX(sparkleX, smoothedPoints) - Math.random() * 20
+      const sparkleSize = 1 + Math.random() * 2
+      
+      terrain.fillCircle(sparkleX, sparkleY, sparkleSize)
+    }
+    
+    // Add some snow drift lines for texture
+    terrain.lineStyle(1, 0xF5F5F5, 0.4) // Very light gray, semi-transparent
+    
+    for (let i = 0; i < 8; i++) {
+      const lineX = x + (Math.random() * width)
+      const lineY = this.getHeightAtX(lineX, smoothedPoints) - Math.random() * 15
+      const lineLength = 5 + Math.random() * 15
+      
+      terrain.lineBetween(lineX, lineY, lineX + lineLength, lineY + Math.random() * 3 - 1.5)
+    }
+  }
+
+  private addSnowDetails(terrain: Phaser.GameObjects.Graphics, smoothedPoints: {x: number, y: number}[], x: number, width: number): void {
+    // Add small snow bumps and variations
+    terrain.fillStyle(0xF8F8FF, 0.6) // Semi-transparent snow white
+    
+    for (let i = 0; i < 6; i++) {
+      const bumpX = x + (Math.random() * width)
+      const bumpY = this.getHeightAtX(bumpX, smoothedPoints)
+      const bumpSize = 3 + Math.random() * 5
+      
+      // Create small oval snow bumps
+      terrain.fillEllipse(bumpX, bumpY - bumpSize/2, bumpSize, bumpSize * 0.6)
+    }
+    
+    // Add subtle shadow effects near the surface
+    terrain.fillStyle(0xE6E6FA, 0.2) // Very light lavender shadow
+    
+    for (let i = 1; i < smoothedPoints.length; i++) {
+      const point = smoothedPoints[i]
+      if (Math.random() < 0.3) { // 30% chance for shadow
+        terrain.fillEllipse(point.x, point.y + 2, 8, 3) // Small shadow beneath surface
+      }
+    }
+  }
+
+  private getHeightAtX(targetX: number, points: {x: number, y: number}[]): number {
+    // Find height at specific X coordinate by interpolating between points
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i]
+      const p2 = points[i + 1]
+      
+      if (targetX >= p1.x && targetX <= p2.x) {
+        const t = (targetX - p1.x) / (p2.x - p1.x)
+        return p1.y + t * (p2.y - p1.y)
+      }
+    }
+    return points[points.length - 1].y // Default to last point
+  }
+
 }

@@ -4,7 +4,7 @@
  */
 
 export const GameSettings = {
-  debug: true,
+  debug: false,
 
   canvas: {
     width: 400, // Portrait: narrower width for mobile
