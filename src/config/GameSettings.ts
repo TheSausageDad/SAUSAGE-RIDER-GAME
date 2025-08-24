@@ -14,26 +14,26 @@ export const GameSettings = {
   motorcycle: {
     width: 60,
     height: 30,
-    maxSpeed: 2800, // More reasonable top speed - faster than before but not crazy
-    acceleration: 3500, // Good acceleration but not excessive
+    maxSpeed: 900, // Increased for more excitement while staying controllable
+    acceleration: 1200, // Increased for better responsiveness
     airControl: 0.5, // Slightly improved air control
-    jumpPower: 1000, // Good jump power
+    jumpPower: 600, // Reduced jump power for balanced gameplay
     gravity: 750, // Balanced gravity
     flipSpeed: 360, // degrees per second
     startX: 100, // Adjusted for narrower portrait view
     startY: 220, // Start 500px above ground level (720-500=220)
-    hillClimbPower: 4.0, // Good uphill power but not extreme
-    mass: 0.6, // Balanced mass
-    boostPower: 5000, // Good boost power
-    minSpeed: 350, // Higher minimum speed for better flow
-    torqueMultiplier: 2.8, // Good torque for uphills without being crazy
+    hillClimbPower: 2.8, // Slightly increased for better uphill flow
+    mass: 0.7, // Slightly lighter for better responsiveness
+    boostPower: 2000, // Reduced boost power
+    minSpeed: 400, // Increased for faster-paced gameplay
+    torqueMultiplier: 1.7, // Slightly increased for better uphill performance
   },
 
   physics: {
     gravity: 900, // Reduced overall gravity for floatier feel
-    groundFriction: 0.992, // Much less friction for maintaining speed
-    airFriction: 0.999, // Almost no air resistance
-    slopeFriction: 0.98, // Much less friction on slopes for better uphill speed retention
+    groundFriction: 0.96, // More friction for better control
+    airFriction: 0.995, // Slight air resistance for balance
+    slopeFriction: 0.92, // More friction on slopes for controlled speeds
   },
 
   level: {
@@ -60,7 +60,7 @@ export const GameSettings = {
   },
 
   tokens: {
-    size: 25,
+    size: 15, // Smaller tokens for better visual clarity
     value: 1,
     spawnRate: 0.8, // probability per chunk
   },

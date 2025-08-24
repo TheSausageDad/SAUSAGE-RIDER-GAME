@@ -14,7 +14,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   
   // Alto's Odyssey style physics
   private velocity: Phaser.Math.Vector2 = new Phaser.Math.Vector2(0, 0)
-  private baseSpeed: number = 400 // Faster but reasonable base speed on flat ground
+  private baseSpeed: number = 280 // Better base speed for good flow while staying controlled
   private maxSpeed: number = GameSettings.motorcycle.maxSpeed // Use GameSettings max speed
   private minSpeed: number = GameSettings.motorcycle.minSpeed // Use GameSettings min speed
   private gravity: number = GameSettings.motorcycle.gravity // Use GameSettings gravity
@@ -188,35 +188,17 @@ export class Motorcycle extends Phaser.GameObjects.Container {
         terrainAngle = this.terrain.getSlopeAngleAtX(this.x)
       }
       
-      // Calculate base jump power with moderate momentum and slope bonuses
-      let jumpPower = this.jumpPower
+      // Speed-based jump power system - higher minimum for better gameplay
+      const minJumpPower = 350 // Higher minimum jump height for better gameplay at slow speeds
+      const maxJumpPower = 600 // Maximum jump height
       
-      // Momentum bonus - faster speed = slightly higher jumps (REDUCED)
-      const speedBonus = Math.max(0, (this.velocity.x - this.baseSpeed) / this.baseSpeed)
-      jumpPower += speedBonus * 100 // Reduced from 300 to 100
+      // Calculate speed ratio (0 to 1)
+      const speedRatio = Math.min(1, Math.max(0, (this.velocity.x - this.minSpeed) / (this.maxSpeed - this.minSpeed)))
       
-      // Slope-based jump bonuses (REDUCED)
-      const slopeStrength = Math.abs(terrainAngle)
+      // Jump power scales linearly with speed
+      const jumpPower = minJumpPower + (speedRatio * (maxJumpPower - minJumpPower))
       
-      if (terrainAngle > 0.1) { // Downward slope = hill top or ramp
-        jumpPower += 50 // Reduced from 150 to 50
-        console.log("Hill top jump bonus!")
-      } else if (terrainAngle < -0.1) { // Upward slope = uphill launch
-        // Uphill launches get moderate power with momentum (REDUCED)
-        const uphillBonus = slopeStrength * 120 // Reduced from 400 to 120
-        const momentumBonus = this.velocity.x > this.baseSpeed * 1.3 ? 60 : 0 // Reduced from 200 to 60
-        jumpPower += uphillBonus + momentumBonus
-        console.log(`Uphill launch! Slope bonus: ${uphillBonus.toFixed(0)}, Momentum bonus: ${momentumBonus}`)
-      }
-      
-      // Small bonus for steep slopes with high speed (REDUCED)
-      if (slopeStrength > 0.3 && this.velocity.x > this.baseSpeed * 1.5) {
-        jumpPower += 80 // Reduced from 250 to 80
-        console.log("Steep slope + high speed bonus!")
-      }
-      
-      // Cap maximum jump power to prevent flying off screen
-      jumpPower = Math.min(jumpPower, 550) // Balanced maximum jump power limit
+      console.log(`Jump power: ${jumpPower.toFixed(0)} (speed: ${this.velocity.x.toFixed(0)}, ratio: ${speedRatio.toFixed(2)})`)
       
       // Calculate jump vector with forward bias
       const perpendicularAngle = terrainAngle - Math.PI/2 // 90 degrees from terrain
@@ -342,7 +324,9 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   }
 
   public update(deltaTime: number): void {
-    const dt = deltaTime / 1000
+    // Clamp deltaTime to prevent physics stutters from large frame spikes
+    const clampedDeltaTime = Math.min(deltaTime, 33.33) // Max 30 FPS equivalent
+    const dt = clampedDeltaTime / 1000
 
     // Alto's Odyssey style movement
     this.updateVelocityBasedOnTerrain(dt)
@@ -357,11 +341,19 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     if (!this.isOnGround) {
       this.velocity.y += this.gravity * dt
       this.airTime += dt
+      
+      // Apply air friction to horizontal velocity (slight)
+      this.velocity.x *= GameSettings.physics.airFriction
     } else {
       // Reset air time when on ground
       if (this.airTime > 0) {
         this.airTime = 0
       }
+    }
+    
+    // Final minimum speed enforcement AFTER all physics updates
+    if (this.isOnGround && this.velocity.x < this.minSpeed) {
+      this.velocity.x = this.minSpeed
     }
 
     // Handle continuous flipping and auto-correction
@@ -411,7 +403,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     }
 
     // Ground collision detection
-    this.checkGroundCollision()
+    this.checkGroundCollision(dt)
 
     // Update terrain rotation when on ground (for continuous slope following)
     if (this.isOnGround && !this.isFlipping) {
@@ -438,37 +430,28 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       // Convert terrain angle to speed influence (-1 = steep uphill, 1 = steep downhill)
       const slopeInfluence = Math.sin(terrainAngle) * this.slopeInfluence
       
-      // Enhanced downhill acceleration and much better uphill speed retention
-      let accelerationMultiplier = 4 // Faster default acceleration rate
-      let speedRetention = 1.0 // How well speed is maintained
+      // Simplified acceleration system
+      let accelerationMultiplier = 2.0 // Base acceleration rate
       
       if (slopeInfluence > 0) {
-        // Downhill - good acceleration but not crazy
-        accelerationMultiplier = 5 + (slopeInfluence * 3) // Reasonable downhill acceleration
-        speedRetention = 1.2 // Good speed buildup but controlled
+        // Downhill - modest speed increase
+        accelerationMultiplier = 2.5 + (slopeInfluence * 0.5) // Gentle downhill acceleration
       } else if (slopeInfluence < 0) {
-        // Uphill - much better speed retention with hill climb power
-        const hillClimbBonus = GameSettings.motorcycle.hillClimbPower * GameSettings.motorcycle.torqueMultiplier
-        accelerationMultiplier = 3 + (hillClimbBonus * 0.05) // Use hill climb power for uphill acceleration
-        speedRetention = 1.0 + (hillClimbBonus * 0.03) // Good uphill speed retention
+        // Uphill - maintain decent performance
+        accelerationMultiplier = 1.8 // Consistent uphill acceleration
       }
       
-      // Calculate target speed based on slope with enhanced downhill benefits
-      let targetSpeed = this.baseSpeed + (slopeInfluence * (this.maxSpeed - this.baseSpeed) * speedRetention)
+      // Simple target speed calculation
+      let targetSpeed = this.baseSpeed + (slopeInfluence * (this.maxSpeed - this.baseSpeed) * 0.6)
       
-      // For downhill, allow reasonable speed increases
-      if (slopeInfluence > 0.3) { // Steep downhill only
-        const downhillBonus = Math.min(slopeInfluence * 200, 400) // Up to 400 extra speed on very steep downhills
-        targetSpeed = Math.min(targetSpeed + downhillBonus, this.maxSpeed + 500) // Reasonable top speed increases
-      }
-      
-      // Balanced speed limits
-      const maxSpeedLimit = slopeInfluence > 0 ? this.maxSpeed + 500 : this.maxSpeed + 100 // More reasonable limits
+      // Controlled speed limits - no excessive bonuses
+      const maxSpeedLimit = this.maxSpeed + 50 // Small headroom for variety
       const clampedSpeed = Phaser.Math.Clamp(targetSpeed, this.minSpeed, maxSpeedLimit)
       
-      // Apply acceleration with terrain-specific multiplier
+      // Apply acceleration with terrain-specific multiplier - more responsive
       const speedDiff = clampedSpeed - this.velocity.x
-      this.velocity.x += speedDiff * accelerationMultiplier * dt
+      const responsiveAcceleration = Math.max(accelerationMultiplier * dt, 0.1) // Minimum 10% change per frame
+      this.velocity.x += speedDiff * responsiveAcceleration
       
       // Keep vertical velocity aligned with terrain when on ground only for slopes
       if (Math.abs(terrainAngle) > 0.01) { // Only adjust for actual slopes
@@ -479,7 +462,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     }
   }
 
-  private checkGroundCollision(): void {
+  private checkGroundCollision(dt: number): void {
     let terrainHeight = GameSettings.level.groundY
     
     // Get terrain height from LevelGenerator if available
@@ -501,21 +484,12 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       // Increase stability counter when we should be on ground
       this.groundCheckStability = Math.min(this.groundCheckStability + 1, 10)
       
-      // Smooth terrain following to prevent bouncing
-      if (this.isOnGround) {
-        // Already on ground - use smooth interpolation instead of instant snapping
-        const smoothFactor = 0.2 // Reduced for more stability
-        const yDifference = targetY - this.y
-        
-        // Only apply smooth correction if the difference is small (normal terrain following)
-        if (Math.abs(yDifference) < 25) {
-          this.y += yDifference * smoothFactor
-        } else {
-          // Large difference - snap to terrain (for big drops/jumps)
-          this.y = targetY
-        }
+      // Landing logic - no slow interpolation
+      if (!this.isOnGround) {
+        // Landing from air - snap to terrain immediately
+        this.y = targetY
       } else {
-        // Landing from air - snap to terrain
+        // Already on ground - follow terrain naturally without interpolation
         this.y = targetY
       }
       
@@ -560,19 +534,19 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       
       // Update rotation to match terrain slope when on ground
       if (this.isOnGround && !this.isFlipping) {
-        this.updateTerrainRotation()
+        this.updateTerrainRotation(dt)
       }
     } else {
       // Above terrain or terrain drop detected - should be in air
       // Decrease stability counter when not on ground
       this.groundCheckStability = Math.max(this.groundCheckStability - 2, 0)
       
-      // Only set airborne if we've been off ground for a few frames (stability check)
-      if (this.isOnGround && this.groundCheckStability <= 3) {
+      // Set airborne more aggressively to prevent slow motion
+      if (this.isOnGround && this.groundCheckStability <= 2) {
         if (isTerrainDrop) {
           this.isOnGround = false
           console.log("Motorcycle fell off terrain drop")
-        } else if (motorcycleBottom < terrainHeight - 20) { // Increased threshold
+        } else if (motorcycleBottom < terrainHeight - 10) { // Reduced threshold for quicker air detection
           this.isOnGround = false
           console.log("Motorcycle left ground")
         }
@@ -678,7 +652,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     this.previousTerrainAngle = currentTerrainAngle
   }
 
-  private updateTerrainRotation(): void {
+  private updateTerrainRotation(dt: number = 0.016): void {
     let terrainAngle = 0
     
     if (this.levelGenerator) {
@@ -699,8 +673,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI
     while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI
     
-    // Apply smooth rotation
-    this.rotation = currentRotation + angleDiff * rotationSpeed * 0.016 // Assuming 60fps
+    // Apply smooth rotation using actual deltaTime
+    this.rotation = currentRotation + angleDiff * rotationSpeed * dt
   }
 
   private processLandingTricks(): void {

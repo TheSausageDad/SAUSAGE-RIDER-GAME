@@ -966,8 +966,8 @@ export class LevelGenerator {
   }
 
   private addTokens(chunk: LevelChunk): void {
-    // Reduce token spawn rate to improve performance
-    if (Math.random() < 0.3) { // Reduced from 0.8 to 0.3
+    // Increase token spawn rate for better trail following
+    if (Math.random() < 0.6) { // Increased spawn rate for more frequent trails
       this.createTokenTrail(chunk)
     }
   }
@@ -991,14 +991,14 @@ export class LevelGenerator {
   }
 
   private createGroundFollowingTrail(chunk: LevelChunk): void {
-    // Trail that follows the terrain contour
-    const numTokens = 2 + Math.floor(Math.random() * 2) // 2-3 tokens (reduced)
+    // Trail that follows the terrain contour - more predictable and easier to follow
+    const numTokens = 4 + Math.floor(Math.random() * 2) // 4-5 tokens for better trail
     const spacing = chunk.width / (numTokens + 1)
     
     for (let i = 1; i <= numTokens; i++) {
       const tokenX = chunk.x + i * spacing
       const terrainHeight = this.getTerrainHeightAtX(tokenX, chunk)
-      const tokenY = terrainHeight - 60 - Math.random() * 40 // 60-100 pixels above terrain
+      const tokenY = terrainHeight - 40 // Much closer to ground for easy collection
       
       const token = new Token(this.scene, tokenX, tokenY)
       chunk.tokens.push(token)
@@ -1006,22 +1006,22 @@ export class LevelGenerator {
   }
 
   private createJumpArcTrail(chunk: LevelChunk): void {
-    // Arc-shaped trail for jump collections
-    const numTokens = 3 + Math.floor(Math.random() * 2) // 3-4 tokens (reduced)
-    const startX = chunk.x + 50
-    const endX = chunk.x + chunk.width - 50
+    // Arc-shaped trail for jump collections - smoother and more predictable
+    const numTokens = 5 // Fixed number for consistent trail
+    const startX = chunk.x + 60
+    const endX = chunk.x + chunk.width - 60
     const width = endX - startX
     
     const baseHeight = this.getTerrainHeightAtX(chunk.x + chunk.width / 2, chunk)
-    const arcHeight = 150 + Math.random() * 100 // Arc goes 150-250 pixels up
+    const arcHeight = 120 // Consistent arc height for predictable jumps
     
     for (let i = 0; i < numTokens; i++) {
       const progress = i / (numTokens - 1) // 0 to 1
       const tokenX = startX + progress * width
       
-      // Create parabolic arc
+      // Create smooth parabolic arc - much lower for reachability
       const arcProgress = 4 * progress * (1 - progress) // Parabola: peaks at 0.5
-      const tokenY = baseHeight - 80 - (arcHeight * arcProgress)
+      const tokenY = baseHeight - 50 - (arcHeight * arcProgress * 0.5) // Half height, closer to ground
       
       const token = new Token(this.scene, tokenX, tokenY)
       chunk.tokens.push(token)
@@ -1029,33 +1029,33 @@ export class LevelGenerator {
   }
 
   private createRampLaunchTrail(chunk: LevelChunk): void {
-    // Trail that follows a ramp launch trajectory
+    // Trail that follows a ramp launch trajectory - more predictable
     if (!chunk.terrainPath || chunk.terrainPath.length < 3) {
       // Fallback to ground following if no terrain path
       this.createGroundFollowingTrail(chunk)
       return
     }
     
-    const numTokens = 3 + Math.floor(Math.random() * 2) // 3-4 tokens (reduced)
-    const launchPoint = chunk.x + chunk.width * 0.7 // Launch from 70% through chunk
+    const numTokens = 4 // Fixed number for consistent trail
+    const launchPoint = chunk.x + chunk.width * 0.6 // Launch from earlier for better collection
     const launchHeight = this.getTerrainHeightAtX(launchPoint, chunk)
     
     for (let i = 0; i < numTokens; i++) {
       const progress = i / (numTokens - 1)
-      const tokenX = launchPoint + progress * 200 // Trail extends 200px forward
+      const tokenX = launchPoint + progress * 180 // Slightly shorter trail for better following
       
-      // Simulate launch trajectory (parabolic path)
-      const horizontalDistance = progress * 200
-      const initialVelocityY = -300 // Launch velocity
-      const gravity = 600
-      const time = horizontalDistance / 300 // Assuming 300px/s horizontal speed
+      // Simulate realistic launch trajectory
+      const horizontalDistance = progress * 180
+      const initialVelocityY = -250 // Moderate launch velocity
+      const gravity = 500
+      const time = horizontalDistance / 350 // Match player's typical speed
       
       const trajectoryY = initialVelocityY * time + 0.5 * gravity * time * time
       const tokenY = launchHeight + trajectoryY
       
-      // Don't place tokens below ground
+      // Only place tokens that are close to ground for easy collection
       const groundAtX = this.getTerrainHeightAtX(tokenX, chunk)
-      if (tokenY < groundAtX - 50) {
+      if (tokenY < groundAtX - 20) { // Much closer to ground
         const token = new Token(this.scene, tokenX, tokenY)
         chunk.tokens.push(token)
       }
