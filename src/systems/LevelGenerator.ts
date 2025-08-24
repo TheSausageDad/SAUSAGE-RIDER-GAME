@@ -939,15 +939,26 @@ export class LevelGenerator {
     const width = endX - startX
     
     const baseHeight = this.getTerrainHeightAtX(chunk.x + chunk.width / 2, chunk)
-    const arcHeight = 120 // Consistent arc height for predictable jumps
+    const arcHeight = 80 // Reduced from 120 for lower, more accessible trail
     
     for (let i = 0; i < numTokens; i++) {
       const progress = i / (numTokens - 1) // 0 to 1
       const tokenX = startX + progress * width
       
-      // Create smooth parabolic arc - much lower for reachability
+      // Create smooth parabolic arc - lower overall for easier collection
       const arcProgress = 4 * progress * (1 - progress) // Parabola: peaks at 0.5
-      const tokenY = baseHeight - 50 - (arcHeight * arcProgress * 0.5) // Half height, closer to ground
+      
+      // Make first and last coins ground-reachable (no jump required)
+      let heightMultiplier
+      if (i === 0 || i === numTokens - 1) {
+        // First and last coins: very low, ground-reachable
+        heightMultiplier = 0.1
+      } else {
+        // Middle coins: gradual arc but much lower than before
+        heightMultiplier = 0.3 + (arcProgress * 0.4) // Scale from 0.3 to 0.7
+      }
+      
+      const tokenY = baseHeight - 30 - (arcHeight * heightMultiplier) // Lowered base height from -50 to -30
       
       // Only spawn token if it's safely above terrain
       if (this.isTokenPositionSafe(tokenX, tokenY, chunk)) {
