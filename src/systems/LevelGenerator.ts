@@ -918,10 +918,16 @@ export class LevelGenerator {
     for (let i = 1; i <= numTokens; i++) {
       const tokenX = chunk.x + i * spacing
       const terrainHeight = this.getTerrainHeightAtX(tokenX, chunk)
-      const tokenY = terrainHeight - 40 // Much closer to ground for easy collection
       
-      const token = this.objectPools.tokenPool.get(tokenX, tokenY)
-      chunk.tokens.push(token)
+      // Calculate safe distance above terrain based on terrain slope
+      const safeDistance = this.calculateSafeTokenDistance(tokenX, chunk)
+      const tokenY = terrainHeight - safeDistance
+      
+      // Only spawn token if it's safely above terrain
+      if (this.isTokenPositionSafe(tokenX, tokenY, chunk)) {
+        const token = this.objectPools.tokenPool.get(tokenX, tokenY)
+        chunk.tokens.push(token)
+      }
     }
   }
 
@@ -943,8 +949,11 @@ export class LevelGenerator {
       const arcProgress = 4 * progress * (1 - progress) // Parabola: peaks at 0.5
       const tokenY = baseHeight - 50 - (arcHeight * arcProgress * 0.5) // Half height, closer to ground
       
-      const token = this.objectPools.tokenPool.get(tokenX, tokenY)
-      chunk.tokens.push(token)
+      // Only spawn token if it's safely above terrain
+      if (this.isTokenPositionSafe(tokenX, tokenY, chunk)) {
+        const token = this.objectPools.tokenPool.get(tokenX, tokenY)
+        chunk.tokens.push(token)
+      }
     }
   }
 
@@ -973,9 +982,8 @@ export class LevelGenerator {
       const trajectoryY = initialVelocityY * time + 0.5 * gravity * time * time
       const tokenY = launchHeight + trajectoryY
       
-      // Only place tokens that are close to ground for easy collection
-      const groundAtX = this.getTerrainHeightAtX(tokenX, chunk)
-      if (tokenY < groundAtX - 20) { // Much closer to ground
+      // Only place tokens that are safely above terrain
+      if (this.isTokenPositionSafe(tokenX, tokenY, chunk)) {
         const token = this.objectPools.tokenPool.get(tokenX, tokenY)
         chunk.tokens.push(token)
       }
@@ -1001,6 +1009,71 @@ export class LevelGenerator {
     
     // Return closest point if not found
     return chunk.terrainPath[0]?.y || GameSettings.level.groundY
+  }
+
+  private calculateSafeTokenDistance(x: number, chunk: LevelChunk): number {
+    if (!chunk.terrainPath || chunk.terrainPath.length < 2) {
+      return 40 // Default safe distance
+    }
+    
+    // Calculate terrain slope at this position
+    const terrainSlope = this.getTerrainSlopeAtX(x, chunk)
+    const slopeAngle = Math.abs(Math.atan(terrainSlope))
+    
+    // Base distance plus extra distance for steep slopes
+    const baseDistance = 40
+    const slopeMultiplier = 1 + (slopeAngle / (Math.PI / 2)) // Scale from 1 to 2 based on steepness
+    
+    return Math.max(baseDistance * slopeMultiplier, 50) // Minimum 50px clearance
+  }
+
+  private getTerrainSlopeAtX(x: number, chunk: LevelChunk): number {
+    if (!chunk.terrainPath || chunk.terrainPath.length < 2) {
+      return 0
+    }
+    
+    // Find the terrain segment containing this x position
+    for (let i = 0; i < chunk.terrainPath.length - 1; i++) {
+      const p1 = chunk.terrainPath[i]
+      const p2 = chunk.terrainPath[i + 1]
+      
+      if (x >= p1.x && x <= p2.x) {
+        // Calculate slope (rise/run)
+        const rise = p2.y - p1.y
+        const run = p2.x - p1.x
+        return run !== 0 ? rise / run : 0
+      }
+    }
+    
+    return 0
+  }
+
+  private isTokenPositionSafe(tokenX: number, tokenY: number, chunk: LevelChunk): boolean {
+    if (!chunk.terrainPath || chunk.terrainPath.length === 0) {
+      return true // No terrain to collide with
+    }
+    
+    const tokenRadius = GameSettings.tokens.size
+    
+    // Check if token overlaps with terrain by testing multiple points around the token
+    const checkPoints = [
+      { x: tokenX, y: tokenY }, // Center
+      { x: tokenX - tokenRadius, y: tokenY }, // Left
+      { x: tokenX + tokenRadius, y: tokenY }, // Right  
+      { x: tokenX, y: tokenY + tokenRadius }, // Bottom
+      { x: tokenX, y: tokenY - tokenRadius }  // Top
+    ]
+    
+    for (const point of checkPoints) {
+      const terrainHeightAtPoint = this.getTerrainHeightAtX(point.x, chunk)
+      
+      // If any point is below or too close to terrain surface, position is unsafe
+      if (point.y >= terrainHeightAtPoint - 10) { // 10px minimum clearance
+        return false
+      }
+    }
+    
+    return true
   }
 
   public update(cameraX: number): void {
