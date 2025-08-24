@@ -1024,18 +1024,21 @@ export class LevelGenerator {
 
   private calculateSafeTokenDistance(x: number, chunk: LevelChunk): number {
     if (!chunk.terrainPath || chunk.terrainPath.length < 2) {
-      return 40 // Default safe distance
+      return 60 // Increased default safe distance
     }
     
     // Calculate terrain slope at this position
     const terrainSlope = this.getTerrainSlopeAtX(x, chunk)
     const slopeAngle = Math.abs(Math.atan(terrainSlope))
     
-    // Base distance plus extra distance for steep slopes
-    const baseDistance = 40
-    const slopeMultiplier = 1 + (slopeAngle / (Math.PI / 2)) // Scale from 1 to 2 based on steepness
+    // Increased base distance and better slope handling
+    const baseDistance = 60 // Increased from 40px
+    const tokenRadius = GameSettings.tokens.size
+    const slopeMultiplier = 1.2 + (slopeAngle / (Math.PI / 2)) // Scale from 1.2 to 2.2 based on steepness
     
-    return Math.max(baseDistance * slopeMultiplier, 50) // Minimum 50px clearance
+    // Ensure minimum clearance accounts for token size plus safety margin
+    const minimumClearance = tokenRadius + 45 // Token radius plus 45px safety
+    return Math.max(baseDistance * slopeMultiplier, minimumClearance)
   }
 
   private getTerrainSlopeAtX(x: number, chunk: LevelChunk): number {
@@ -1065,23 +1068,36 @@ export class LevelGenerator {
     }
     
     const tokenRadius = GameSettings.tokens.size
+    const minClearance = tokenRadius + 20 // Ensure full token radius plus extra safety margin
     
-    // 1. Check terrain collision by testing multiple points around the token
+    // 1. Enhanced terrain collision detection - test more points around the token circumference
     const checkPoints = [
       { x: tokenX, y: tokenY }, // Center
       { x: tokenX - tokenRadius, y: tokenY }, // Left
       { x: tokenX + tokenRadius, y: tokenY }, // Right  
       { x: tokenX, y: tokenY + tokenRadius }, // Bottom
-      { x: tokenX, y: tokenY - tokenRadius }  // Top
+      { x: tokenX, y: tokenY - tokenRadius }, // Top
+      // Add diagonal points for better coverage
+      { x: tokenX - tokenRadius * 0.7, y: tokenY + tokenRadius * 0.7 }, // Bottom-left
+      { x: tokenX + tokenRadius * 0.7, y: tokenY + tokenRadius * 0.7 }, // Bottom-right
+      { x: tokenX - tokenRadius * 0.7, y: tokenY - tokenRadius * 0.7 }, // Top-left
+      { x: tokenX + tokenRadius * 0.7, y: tokenY - tokenRadius * 0.7 }  // Top-right
     ]
     
     for (const point of checkPoints) {
       const terrainHeightAtPoint = this.getTerrainHeightAtX(point.x, chunk)
       
-      // If any point is below or too close to terrain surface, position is unsafe
-      if (point.y >= terrainHeightAtPoint - 10) { // 10px minimum clearance
+      // If any point is below terrain or within minimum clearance, position is unsafe
+      if (point.y >= terrainHeightAtPoint - minClearance) {
         return false
       }
+    }
+    
+    // 2. Additional safety check: ensure bottom of token is well above terrain
+    const tokenBottomY = tokenY + tokenRadius
+    const terrainHeightAtCenter = this.getTerrainHeightAtX(tokenX, chunk)
+    if (tokenBottomY >= terrainHeightAtCenter - 15) { // Extra bottom clearance check
+      return false
     }
     
     // 2. Check for overlap with existing tokens in this chunk and nearby chunks
