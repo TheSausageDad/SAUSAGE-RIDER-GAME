@@ -1066,7 +1066,7 @@ export class LevelGenerator {
     
     const tokenRadius = GameSettings.tokens.size
     
-    // Check if token overlaps with terrain by testing multiple points around the token
+    // 1. Check terrain collision by testing multiple points around the token
     const checkPoints = [
       { x: tokenX, y: tokenY }, // Center
       { x: tokenX - tokenRadius, y: tokenY }, // Left
@@ -1081,6 +1081,39 @@ export class LevelGenerator {
       // If any point is below or too close to terrain surface, position is unsafe
       if (point.y >= terrainHeightAtPoint - 10) { // 10px minimum clearance
         return false
+      }
+    }
+    
+    // 2. Check for overlap with existing tokens in this chunk and nearby chunks
+    const minDistance = tokenRadius * 2.5 // Minimum distance between token centers (2.5x radius for good spacing)
+    
+    // Check tokens in current chunk
+    for (const existingToken of chunk.tokens) {
+      const dx = tokenX - existingToken.x
+      const dy = tokenY - existingToken.y
+      const distance = Math.sqrt(dx * dx + dy * dy)
+      
+      if (distance < minDistance) {
+        return false // Too close to existing token
+      }
+    }
+    
+    // Check tokens in nearby chunks (to prevent cross-chunk overlaps)
+    for (const nearbyChunk of this.chunks) {
+      if (nearbyChunk === chunk) continue // Already checked above
+      
+      // Only check chunks that are close enough to matter
+      const chunkDistance = Math.abs(nearbyChunk.x - chunk.x)
+      if (chunkDistance > GameSettings.level.chunkWidth * 1.5) continue
+      
+      for (const existingToken of nearbyChunk.tokens) {
+        const dx = tokenX - existingToken.x
+        const dy = tokenY - existingToken.y
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        
+        if (distance < minDistance) {
+          return false // Too close to existing token in nearby chunk
+        }
       }
     }
     
