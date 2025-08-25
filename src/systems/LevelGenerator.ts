@@ -253,14 +253,20 @@ export class LevelGenerator {
       this.terrainLength = 1 + Math.floor(Math.random() * 2) // 1-2 chunks (quick changes)
       this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 200 // ±100px changes
       console.log(`🌄 SELECTED: mini_slopes terrain (${this.terrainLength} chunks)`)
-    } else if (terrainType < 0.85) {
-      // Massive jumps (2-3 chunks) - big air opportunities - 7%
+    } else if (terrainType < 0.88) {
+      // Massive jumps (2-3 chunks) - big air opportunities - 12% (increased from 7%)
       this.currentTerrainType = 'massive_jump'
       this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for big jumps
       this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 300 // ±150px variation with ramps
       console.log(`🌄 SELECTED: massive_jump terrain (${this.terrainLength} chunks)`)
-    } else if (terrainType < 0.90) {
-      // Speed valleys (2-4 chunks) - momentum building dips - 5%
+    } else if (terrainType < 0.91) {
+      // Jump chain (3-4 chunks) - multiple consecutive jumps - 3% (NEW!)
+      this.currentTerrainType = 'jump_chain'
+      this.terrainLength = 3 + Math.floor(Math.random() * 2) // 3-4 chunks for jump sequence
+      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 200 // ±100px base variation
+      console.log(`🚀 SELECTED: jump_chain terrain (${this.terrainLength} chunks)`)
+    } else if (terrainType < 0.94) {
+      // Speed valleys (2-4 chunks) - momentum building dips - 3%
       this.currentTerrainType = 'speed_valley'
       this.terrainLength = 2 + Math.floor(Math.random() * 3) // 2-4 chunks for extended valleys
       this.targetHeight = this.lastChunkEndHeight + 200 + Math.random() * 200 // Go down 200-400px for speed building
@@ -336,6 +342,9 @@ export class LevelGenerator {
         break
       case 'massive_jump':
         this.createMassiveJump(chunk, x, width, progress)
+        break
+      case 'jump_chain':
+        this.createJumpChain(chunk, x, width, progress)
         break
       case 'speed_valley':
         this.createSpeedValley(chunk, x, width, progress)
@@ -590,10 +599,15 @@ export class LevelGenerator {
       const localProgress = i / numPoints
       const pointX = x + (width * localProgress)
       
-      // Add some natural variation to make it feel more organic
+      // Add some natural variation and launch potential at the end
       const variation = Math.sin(localProgress * Math.PI * 3) * 20 * (1 - progress * 0.5)
+      
+      // Add launch ramp at end of epic downhills for big air opportunities
+      const launchRamp = localProgress > 0.8 && progress > 0.6 ? 
+        Math.sin((localProgress - 0.8) / 0.2 * Math.PI) * -40 : 0 // Upward curve at end for launch
+      
       const curveProgress = this.easeInOutQuad(localProgress)
-      const pointY = startHeight + (endHeight - startHeight) * curveProgress + variation
+      const pointY = startHeight + (endHeight - startHeight) * curveProgress + variation + launchRamp
       pathPoints.push({ x: pointX, y: pointY })
     }
     
@@ -650,12 +664,16 @@ export class LevelGenerator {
       const localProgress = i / numPoints
       const pointX = x + (width * localProgress)
       
-      // Quick, snappy elevation changes with multiple small bumps
+      // Quick, snappy elevation changes with multiple small jumps
       const primarySlope = startHeight + (endHeight - startHeight) * localProgress
       const miniBumps = Math.sin(localProgress * Math.PI * 4) * 30 + 
                        Math.sin(localProgress * Math.PI * 8) * 15
       
-      const pointY = primarySlope + miniBumps
+      // Add jump-friendly launch ramps on positive slopes
+      const rampBonus = Math.sin(localProgress * Math.PI * 6)
+      const jumpRamp = rampBonus > 0 ? rampBonus * 25 : 0 // Only positive slopes become ramps
+      
+      const pointY = primarySlope + miniBumps - jumpRamp // Subtract to create upward ramps
       pathPoints.push({ x: pointX, y: pointY })
     }
     
@@ -677,15 +695,19 @@ export class LevelGenerator {
       const localProgress = i / numPoints
       const pointX = x + (width * localProgress)
       
-      // Create dramatic landscape with multiple frequency waves
+      // Create dramatic landscape with multiple frequency waves and jump-friendly features
       const globalProgress = progress + (localProgress / this.terrainLength)
       const wave1 = Math.sin(globalProgress * Math.PI * 1.2) * 120 // Large primary hills
       const wave2 = Math.sin(globalProgress * Math.PI * 2.8) * 60  // Medium secondary hills
       const wave3 = Math.sin(globalProgress * Math.PI * 6) * 25    // Small detail bumps
       
+      // Add jump-friendly launch ramps on upward slopes
+      const slopeDirection = Math.cos(globalProgress * Math.PI * 1.2) // Detect upward slopes
+      const launchBoost = slopeDirection > 0.3 ? Math.sin(localProgress * Math.PI * 8) * 20 : 0 // Add small ramps on upward slopes
+      
       // Blend with connection to ensure smooth chunk boundaries
       const connectionBlend = Math.min(localProgress * 2, 1)
-      const dramaticHeight = startHeight + wave1 + wave2 + wave3
+      const dramaticHeight = startHeight + wave1 + wave2 + wave3 - Math.abs(launchBoost)
       const blendedHeight = startHeight * (1 - connectionBlend) + dramaticHeight * connectionBlend
       
       pathPoints.push({ x: pointX, y: blendedHeight })
@@ -736,6 +758,47 @@ export class LevelGenerator {
     this.lastChunkEndAngle = Math.atan2(pathPoints[pathPoints.length - 1].y - pathPoints[pathPoints.length - 2].y, width / numPoints)
     
     this.createSmoothTerrain(chunk, pathPoints, x, width) // 0x00BCD4) // Cyan for massive jumps
+  }
+
+  private createJumpChain(chunk: LevelChunk, x: number, width: number, progress: number): void {
+    const startHeight = this.lastChunkEndHeight
+    const endHeight = startHeight + (this.targetHeight - startHeight) * this.easeInOutQuad(progress)
+    
+    const pathPoints = []
+    const numPoints = 35
+    
+    pathPoints.push({ x: x, y: startHeight })
+    
+    // Create a series of jump ramps - 3-4 small jumps in sequence
+    const numJumps = 3 + Math.floor(this.terrainLength / 3) // 3-4 jumps based on terrain length
+    
+    for (let i = 1; i <= numPoints; i++) {
+      const localProgress = i / numPoints
+      const pointX = x + (width * localProgress)
+      
+      // Base terrain following the overall target height
+      const baseY = startHeight + (endHeight - startHeight) * localProgress
+      
+      // Add jump ramps as wave pattern
+      const jumpFreq = numJumps * Math.PI // Multiple jumps across the chunk
+      const jumpWave = Math.sin(localProgress * jumpFreq)
+      
+      // Only create upward ramps (positive parts of sine wave)
+      const jumpHeight = Math.max(0, jumpWave) * 50 // Up to 50px jump ramps
+      
+      // Add small launch angles at peak of each jump
+      const peakDetection = Math.cos(localProgress * jumpFreq)
+      const launchAngle = peakDetection < -0.8 ? Math.sin(localProgress * jumpFreq * 4) * 15 : 0
+      
+      const pointY = baseY - jumpHeight - launchAngle
+      
+      pathPoints.push({ x: pointX, y: pointY })
+    }
+    
+    this.lastChunkEndHeight = pathPoints[pathPoints.length - 1].y
+    this.lastChunkEndAngle = Math.atan2(pathPoints[pathPoints.length - 1].y - pathPoints[pathPoints.length - 2].y, width / numPoints)
+    
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0xFF4081) // Hot pink for jump chains
   }
 
   private createSpeedValley(chunk: LevelChunk, x: number, width: number, progress: number): void {
