@@ -18,8 +18,11 @@ export class GameScene extends Phaser.Scene {
   private camera!: Phaser.Cameras.Scene2D.Camera
   private gameState: 'playing' | 'gameOver' = 'playing'
   
-  // Parallax background layers with infinite generation
-  private parallaxLayers: { graphics: Phaser.GameObjects.Graphics, scrollFactor: number, layerIndex: number, color: number, lastX: number }[] = []
+  // Parallax background layers with infinite mixed images
+  private parallaxLayers: { container: Phaser.GameObjects.Container, scrollFactor: number, layerIndex: number, lastExtendX: number }[] = []
+  private mountainImages = ['low-mountainscape', 'one-peak', 'two-peaks', 'higher-mountainscape']
+  private grassTile!: Phaser.GameObjects.TileSprite
+  private backgroundTile!: Phaser.GameObjects.TileSprite
 
   constructor() {
     super({ key: "GameScene" })
@@ -29,6 +32,21 @@ export class GameScene extends Phaser.Scene {
     // Load player images
     this.load.image('player', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Riding%20image-hkOurseDcYE6YvgDWvYoQ16cgzxM01.png?j9V4')
     this.load.image('player_flipping', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Flipping-yCElSe7lSawCKvFuduGGAf9HmQ0O17.png?Ncwo')
+    
+    // Load mountain background images for parallax
+    this.load.image('low-mountainscape', 'assets/images/mountains/low-mountainscape.png')
+    this.load.image('one-peak', 'assets/images/mountains/one-peak.png')
+    this.load.image('two-peaks', 'assets/images/mountains/two-peaks.png')
+    this.load.image('higher-mountainscape', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Higher%20mouintan%20scape-PvVImg9WQmSVri4OwNfJc6m4GjvVi2.png?VZGv')
+    
+    // Load grass ground texture
+    this.load.image('grass', 'assets/images/grass.png')
+    
+    // Load static background image (furthest layer)
+    this.load.image('background', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Snow%20Background-KfEe8V5zyq6R8WytKn6B5VKt6f67Ui.png?G00d')
+    
+    // Load custom font
+    this.load.font('pressStart2P', 'assets/fonts/Press_Start_2P/PressStart2P-Regular.ttf')
   }
 
   create(): void {
@@ -110,248 +128,291 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createBackground(): void {
-    // Dynamic sky gradient that moves slightly with camera for depth
-    const skyGraphics = this.add.graphics()
-    skyGraphics.fillGradientStyle(0x4169E1, 0x4169E1, 0x87CEEB, 0x87CEEB, 1, 1, 1, 1) // Deeper blue sky
-    skyGraphics.fillRect(0, 0, GameSettings.canvas.width * 30, GameSettings.canvas.height)
-    skyGraphics.setDepth(-100)
-    skyGraphics.setScrollFactor(0.05) // Very slight sky movement for depth
+    // Create repeating background image as the very back layer
+    this.createRepeatingBackground()
     
-    // Initialize infinite parallax mountain system
-    this.initializeParallaxMountains()
+    // Add grass ground layer below mountains
+    this.createGrassGround()
+    
+    // Add solid ground base below grass to prevent empty space on high jumps
+    this.createGroundBase()
+    
+    // Initialize image-based parallax mountain system
+    this.initializeImageParallaxMountains()
   }
 
-  private createDetailedMountainLayer(layerIndex: number, depth: number, color: number, scrollFactor: number): void {
-    const graphics = this.add.graphics()
-    graphics.setDepth(depth)
-    graphics.setScrollFactor(scrollFactor) // Parallax effect
+  private createRepeatingBackground(): void {
+    // Create static background image that fills the entire screen and follows the camera
+    const backgroundImage = this.add.image(
+      GameSettings.canvas.width / 2, // Center X
+      GameSettings.canvas.height / 2, // Center Y
+      'background'
+    )
     
-    const layerWidth = GameSettings.canvas.width * 8
-    const canvasHeight = GameSettings.canvas.height
+    // Scale to fill entire screen
+    const scaleX = GameSettings.canvas.width / backgroundImage.width
+    const scaleY = GameSettings.canvas.height / backgroundImage.height
+    const scale = Math.max(scaleX, scaleY) // Use larger scale to ensure full coverage
     
-    // Base heights for 3 layers - progressively taller but below player terrain (720px)
-    const baseHeights = [200, 300, 450] // Well below 680px limit
-    let baseHeight = baseHeights[layerIndex] || 200
+    backgroundImage.setScale(scale)
+    backgroundImage.setDepth(-110) // Furthest back layer, behind absolutely everything
+    backgroundImage.setScrollFactor(0) // No parallax - stays fixed to camera/screen
     
-    // Create detailed mountains with trees
-    this.createMountainsWithTrees(graphics, layerWidth, canvasHeight, baseHeight, layerIndex, color)
+    // Store reference (though we won't need to update it)
+    this.backgroundTile = backgroundImage as any
     
-    this.parallaxLayers.push({ graphics, scrollFactor, layerIndex, color, lastX: layerWidth - 200 })
+    console.log('🌌 Created static background image that follows camera')
   }
 
-  private createMountainsWithTrees(graphics: Phaser.GameObjects.Graphics, layerWidth: number, canvasHeight: number, baseHeight: number, layerIndex: number, mountainColor: number): void {
-    const opacity = 0.5 + layerIndex * 0.2 // More visible for detailed mountains
-    graphics.fillStyle(mountainColor, opacity)
+  private createGrassGround(): void {
+    // Create infinite tiling grass ground below mountains
+    const grassTile = this.add.tileSprite(
+      0, 
+      GameSettings.canvas.height - 50, // Position just below screen bottom
+      GameSettings.canvas.width * 20, // Very wide for infinite coverage
+      200, // 200px tall grass layer
+      'grass'
+    )
     
-    // Create mountain silhouette first
-    graphics.beginPath()
-    graphics.moveTo(0, canvasHeight)
+    grassTile.setOrigin(0, 0)
+    grassTile.setDepth(-88) // Above solid ground base, below mountains
+    grassTile.setScrollFactor(0.05) // Slight parallax movement
+    grassTile.setAlpha(0.9) // Slightly transparent to blend naturally
     
-    const segments = 30 // More detail for tree placement
-    const mountainPoints: {x: number, y: number}[] = []
+    // Store reference for infinite scrolling updates
+    this.grassTile = grassTile
     
-    for (let i = 0; i <= segments; i++) {
-      const x = (i / segments) * layerWidth
-      const seed = (x + layerIndex * 1000) * 0.002
+    console.log('🌱 Created grass ground layer below mountains')
+  }
+
+  private createGroundBase(): void {
+    // Create a solid ground base that extends well below the screen
+    // This prevents empty space when jumping high
+    const groundGraphics = this.add.graphics()
+    
+    // Earth/mountain base color - brownish gray
+    groundGraphics.fillStyle(0x3C3C3C, 0.8) // Dark gray with some transparency
+    
+    // Create a very wide and tall ground base
+    const groundWidth = GameSettings.canvas.width * 30
+    const groundHeight = 400 // Extends 400px below screen bottom
+    
+    groundGraphics.fillRect(0, GameSettings.canvas.height + 150, groundWidth, groundHeight) // Position below grass
+    groundGraphics.setDepth(-90) // Behind everything
+    groundGraphics.setScrollFactor(0.02) // Very slight parallax movement
+    
+    console.log('🌍 Created ground base to prevent empty space on high jumps')
+  }
+
+  private updateGrassGround(cameraX: number): void {
+    if (this.grassTile) {
+      // Update grass tile position for infinite scrolling
+      const virtualCameraX = cameraX * this.grassTile.scrollFactorX
       
-      // Generate mountain peaks that stay well below player terrain
-      const peakVariation = Math.sin(seed * 1.2) * (80 + layerIndex * 30) + 
-                           Math.sin(seed * 3) * (40 + layerIndex * 15) +
-                           Math.sin(seed * 8) * (20 + layerIndex * 8)
+      // Update the tile position for seamless grass texture scrolling
+      this.grassTile.tilePositionX = virtualCameraX * 0.3 // Slower tile movement for natural look
       
-      const mountainHeight = baseHeight + peakVariation
-      const y = Math.min(canvasHeight - mountainHeight, 650) // Stay below player terrain
-      
-      mountainPoints.push({x, y})
-      graphics.lineTo(x, y)
+      // Keep the grass positioned to always cover the visible area
+      this.grassTile.x = cameraX - (GameSettings.canvas.width * 2)
     }
-    
-    graphics.lineTo(layerWidth, canvasHeight)
-    graphics.closePath()
-    graphics.fillPath()
-    
-    // Add trees on mountain slopes
-    this.addTreesToMountain(graphics, mountainPoints, layerIndex)
   }
 
-  private addTreesToMountain(graphics: Phaser.GameObjects.Graphics, mountainPoints: {x: number, y: number}[], layerIndex: number): void {
-    const treeSize = Math.max(8, 12 - layerIndex * 2) // Smaller trees for distant mountains
-    const treeSpacing = 40 + layerIndex * 20 // More spacing for closer mountains
-    const treeColor = 0x0F4C2B // Dark forest green
-    const trunkColor = 0x4A2C17 // Brown
+  // Background is now static and follows camera automatically - no update needed
+
+  private createInfiniteRandomMountainLayer(layerIndex: number, depth: number, scrollFactor: number, baseScale: number, yRange: [number, number]): void {
+    // Create a container to hold multiple random mountain sprites
+    const container = this.add.container(0, 0)
+    container.setDepth(depth)
+    container.setScrollFactor(scrollFactor)
     
-    for (let i = 0; i < mountainPoints.length - 1; i++) {
-      const point = mountainPoints[i]
-      const nextPoint = mountainPoints[i + 1]
-      
-      // Calculate slope (don't put trees on very steep slopes)
-      const slope = Math.abs(nextPoint.y - point.y) / Math.abs(nextPoint.x - point.x)
-      
-      // Only place trees on reasonable slopes and with some randomness
-      if (slope < 0.8 && point.x % treeSpacing < 5 && Math.random() > 0.4) {
-        this.drawTree(graphics, point.x, point.y, treeSize, treeColor, trunkColor)
+    // Atmospheric perspective settings - Fully opaque mountains
+    const alpha = 1.0 // Completely opaque for all layers
+    const blueTint = 1.0 - (layerIndex * 0.05) // Very subtle blue tint for distant mountains
+    
+    // Generate initial mountain segments across a wide area with MASSIVE mountain density
+    const segmentWidth = 200 // Much smaller segments for WAY more mountains
+    const totalWidth = GameSettings.canvas.width * 20 // Even wider initial coverage
+    const numSegments = Math.ceil(totalWidth / segmentWidth)
+    
+    for (let i = 0; i < numSegments; i++) {
+      // Place mountains in only 12% of segments for very sparse, distant look
+      if (Math.random() < 0.12) {
+        this.addRandomMountainSegment(container, i * segmentWidth, layerIndex, baseScale, yRange, alpha, blueTint)
       }
     }
-  }
-
-  private drawTree(graphics: Phaser.GameObjects.Graphics, x: number, y: number, size: number, treeColor: number, trunkColor: number): void {
-    const opacity = 0.7
     
-    // Draw trunk
-    graphics.fillStyle(trunkColor, opacity)
-    graphics.fillRect(x - size/6, y, size/3, size/2)
+    console.log(`🏔️ Created infinite mountain layer ${layerIndex}: ${numSegments} segments, scale=${baseScale}, alpha=${alpha}`)
     
-    // Draw tree crown (simple triangle)
-    graphics.fillStyle(treeColor, opacity)
-    graphics.beginPath()
-    graphics.moveTo(x, y - size/2) // Top point
-    graphics.lineTo(x - size/2, y) // Bottom left
-    graphics.lineTo(x + size/2, y) // Bottom right
-    graphics.closePath()
-    graphics.fillPath()
-    
-    // Add smaller top layer for more tree-like appearance
-    graphics.fillStyle(treeColor, opacity + 0.1)
-    graphics.beginPath()
-    graphics.moveTo(x, y - size/3) // Top point
-    graphics.lineTo(x - size/3, y - size/6) // Bottom left
-    graphics.lineTo(x + size/3, y - size/6) // Bottom right
-    graphics.closePath()
-    graphics.fillPath()
-  }
-
-  private createSimpleMountains(graphics: Phaser.GameObjects.Graphics, layerWidth: number, canvasHeight: number, baseHeight: number, layerIndex: number, mountainColor: number): void {
-    const opacity = 0.4 + layerIndex * 0.15 // More visible opacity
-    graphics.fillStyle(mountainColor, opacity)
-    
-    // Create simple mountain silhouette using curves
-    graphics.beginPath()
-    graphics.moveTo(0, canvasHeight)
-    
-    const segments = 25 // Slightly more detail
-    for (let i = 0; i <= segments; i++) {
-      const x = (i / segments) * layerWidth
-      const seed = (x + layerIndex * 1000) * 0.003 // More variation per layer
-      
-      // Generate mountain peaks that stay well below player terrain (720px)
-      const peakVariation = Math.sin(seed * 1.5) * (60 + layerIndex * 20) + 
-                           Math.sin(seed * 4) * (30 + layerIndex * 10) +
-                           Math.sin(seed * 10) * (15 + layerIndex * 5)
-      
-      const mountainHeight = baseHeight + peakVariation
-      const y = Math.min(canvasHeight - mountainHeight, 680) // Never go above 680px (40px below player ground)
-      
-      graphics.lineTo(x, y)
-    }
-    
-    graphics.lineTo(layerWidth, canvasHeight)
-    graphics.closePath()
-    graphics.fillPath()
+    this.parallaxLayers.push({ 
+      container, 
+      scrollFactor, 
+      layerIndex, 
+      lastExtendX: numSegments * segmentWidth 
+    })
   }
 
 
-  private initializeParallaxMountains(): void {
-    // Create 3 detailed mountain layers with trees
-    const mountainConfigs = [
-      { depth: -85, color: 0x2C3E50, scrollFactor: 0.1 },  // Far - dark blue mountains
-      { depth: -80, color: 0x34495E, scrollFactor: 0.15 }, // Mid - medium blue-gray  
-      { depth: -75, color: 0x5D6D7E, scrollFactor: 0.2 }   // Close - lighter blue-gray
+
+
+
+
+  private initializeImageParallaxMountains(): void {
+    // Create 5 parallax mountain layers with MUCH more visible mountains
+    const layerConfigs = [
+      { depth: -85, scrollFactor: 0.05, baseScale: 1.5, yRange: [1075, 1125] as [number, number] },   // Far mountains (smaller)
+      { depth: -80, scrollFactor: 0.1, baseScale: 1.3, yRange: [1105, 1155] as [number, number] },  // Large far mountains (smaller)
+      { depth: -75, scrollFactor: 0.2, baseScale: 1.2, yRange: [1145, 1195] as [number, number] }, // Mid mountains (smaller)
+      { depth: -70, scrollFactor: 0.3, baseScale: 1.1, yRange: [1175, 1225] as [number, number] }, // Medium mountains (smaller)
+      { depth: -65, scrollFactor: 0.4, baseScale: 1.0, yRange: [1205, 1255] as [number, number] }  // Close mountains
     ]
 
-    mountainConfigs.forEach((config, index) => {
-      this.createDetailedMountainLayer(index, config.depth, config.color, config.scrollFactor)
+    layerConfigs.forEach((config, index) => {
+      this.createInfiniteRandomMountainLayer(index, config.depth, config.scrollFactor, config.baseScale, config.yRange)
     })
   }
 
   private updateParallaxMountains(cameraX: number): void {
-    // Check each mountain layer and extend if needed
+    // Update infinite random mountain layers
     this.parallaxLayers.forEach(layer => {
       const virtualCameraX = cameraX * layer.scrollFactor
-      const distanceAhead = layer.lastX - virtualCameraX
       
-      // If we're getting close to the end of this layer, extend it
-      if (distanceAhead < GameSettings.canvas.width * 3) {
-        this.extendMountainLayer(layer, virtualCameraX)
+      // Check if we need to extend this layer - extend MUCH earlier
+      const cameraRightEdge = virtualCameraX + (GameSettings.canvas.width * 4) // Look further ahead
+      
+      if (cameraRightEdge > layer.lastExtendX - 2000) { // Extend much earlier
+        this.extendRandomMountainLayer(layer)
       }
+      
+      // Position container to follow camera
+      layer.container.x = -virtualCameraX + (GameSettings.canvas.width * 0.5)
+      
+      // Clean up old mountain segments that are far behind camera
+      this.cleanupOldMountainSegments(layer, virtualCameraX)
     })
   }
 
-  private extendMountainLayer(layer: { graphics: Phaser.GameObjects.Graphics, scrollFactor: number, layerIndex: number, color: number, lastX: number }, virtualCameraX: number): void {
-    const layerWidth = GameSettings.canvas.width * 4
-    const canvasHeight = GameSettings.canvas.height
-    const baseHeights = [200, 300, 450] // Match new 3-layer system
-    let baseHeight = baseHeights[layer.layerIndex] || 200
-    
-    const startX = layer.lastX
-    
-    // Create detailed continuation with trees
-    this.createMountainSectionWithTrees(layer.graphics, startX, layerWidth, canvasHeight, baseHeight, layer.layerIndex, layer.color)
-    
-    layer.lastX = startX + layerWidth
-  }
-
-  private createMountainSectionWithTrees(graphics: Phaser.GameObjects.Graphics, startX: number, width: number, canvasHeight: number, baseHeight: number, layerIndex: number, mountainColor: number): void {
-    const opacity = 0.5 + layerIndex * 0.2 // Match detailed mountains
-    graphics.fillStyle(mountainColor, opacity)
-    
-    // Create mountain silhouette
-    graphics.beginPath()
-    graphics.moveTo(startX, canvasHeight)
-    
-    const segments = 20 // Good detail for extensions
-    const mountainPoints: {x: number, y: number}[] = []
-    
-    for (let i = 0; i <= segments; i++) {
-      const x = startX + (i / segments) * width
-      const seed = (x + layerIndex * 1000) * 0.002
-      
-      // Generate mountain peaks that stay well below player terrain
-      const peakVariation = Math.sin(seed * 1.2) * (80 + layerIndex * 30) + 
-                           Math.sin(seed * 3) * (40 + layerIndex * 15) +
-                           Math.sin(seed * 8) * (20 + layerIndex * 8)
-      
-      const mountainHeight = baseHeight + peakVariation
-      const y = Math.min(canvasHeight - mountainHeight, 650) // Stay below player terrain
-      
-      mountainPoints.push({x, y})
-      graphics.lineTo(x, y)
+  private addRandomMountainSegment(container: Phaser.GameObjects.Container, x: number, layerIndex: number, baseScale: number, yRange: [number, number], alpha: number, blueTint: number): void {
+    // Choose mountain type based on layer for proper depth perception
+    let imageKey: string
+    if (layerIndex === 0) {
+      // Far layer (background): Use tall peaks and higher mountainscape for distant mountains
+      const rand = Math.random()
+      if (rand < 0.3) imageKey = 'higher-mountainscape'
+      else if (rand < 0.65) imageKey = 'one-peak'
+      else imageKey = 'two-peaks'
+    } else if (layerIndex === 1) {
+      // Mid layer: Mix of all mountain types
+      const rand = Math.random()
+      if (rand < 0.25) imageKey = 'higher-mountainscape'
+      else if (rand < 0.45) imageKey = 'low-mountainscape'
+      else if (rand < 0.7) imageKey = 'one-peak'
+      else imageKey = 'two-peaks'
+    } else {
+      // Close layers: Primarily low-mountainscape with some variety
+      const rand = Math.random()
+      if (rand < 0.6) imageKey = 'low-mountainscape'
+      else if (rand < 0.75) imageKey = 'one-peak'
+      else if (rand < 0.9) imageKey = 'two-peaks'
+      else imageKey = 'higher-mountainscape'
     }
     
-    graphics.lineTo(startX + width, canvasHeight)
-    graphics.closePath()
-    graphics.fillPath()
+    // Add random variations - less extreme for cleaner look
+    const scaleVariation = 0.8 + (Math.random() * 0.4) // 0.8x to 1.2x scale variation (less extreme)
+    const finalScale = baseScale * scaleVariation
     
-    // Add trees to the extended section
-    this.addTreesToMountain(graphics, mountainPoints, layerIndex)
+    // Random vertical positioning within range
+    const yOffset = yRange[0] + (Math.random() * (yRange[1] - yRange[0]))
+    const yPos = yOffset // Direct positioning - higher yRange = lower on screen
+    
+    // Random horizontal flipping (50% chance)
+    const flipX = Math.random() > 0.5
+    
+    // Create mountain sprite
+    const mountain = this.add.image(x, yPos, imageKey)
+    mountain.setOrigin(0, 1) // Bottom-left origin
+    mountain.setScale(finalScale * (flipX ? -1 : 1), finalScale) // Handle flipping
+    mountain.setAlpha(alpha)
+    
+    // Apply atmospheric blue tint
+    const tintColor = Phaser.Display.Color.GetColor(
+      Math.floor(blueTint * 255), 
+      Math.floor(blueTint * 255), 
+      255
+    )
+    mountain.setTint(tintColor)
+    
+    // Add to container
+    container.add(mountain)
+    
+    // Store metadata for cleanup
+    ;(mountain as any).segmentX = x
   }
 
-  private createSimpleMountainSection(graphics: Phaser.GameObjects.Graphics, startX: number, width: number, canvasHeight: number, baseHeight: number, layerIndex: number, mountainColor: number): void {
-    const opacity = 0.4 + layerIndex * 0.15 // Match main mountain opacity
-    graphics.fillStyle(mountainColor, opacity)
+  private extendRandomMountainLayer(layer: { container: Phaser.GameObjects.Container, scrollFactor: number, layerIndex: number, lastExtendX: number }): void {
+    const segmentWidth = 200 // Match the smaller segment width
+    const numNewSegments = 20 // Add TONS more segments at once
     
-    graphics.beginPath()
-    graphics.moveTo(startX, canvasHeight)
+    const layerConfigs = [
+      { baseScale: 1.5, yRange: [1075, 1125] as [number, number] },   // Far mountains (smaller)
+      { baseScale: 1.3, yRange: [1105, 1155] as [number, number] },  // Large far mountains (smaller)
+      { baseScale: 1.2, yRange: [1145, 1195] as [number, number] }, // Mid mountains (smaller)
+      { baseScale: 1.1, yRange: [1175, 1225] as [number, number] }, // Medium mountains (smaller)
+      { baseScale: 1.0, yRange: [1205, 1255] as [number, number] }  // Close mountains
+    ]
     
-    const segments = 15 // More detail for extensions
-    for (let i = 0; i <= segments; i++) {
-      const x = startX + (i / segments) * width
-      const seed = (x + layerIndex * 1000) * 0.003 // Match main mountain variation
+    const config = layerConfigs[layer.layerIndex] || layerConfigs[0] // Fallback to first config
+    const alpha = 1.0 // Completely opaque for all layers
+    const blueTint = 1.0 - (layer.layerIndex * 0.05) // Match the tint settings
+    
+    for (let i = 0; i < numNewSegments; i++) {
+      const x = layer.lastExtendX + (i * segmentWidth)
       
-      // Generate mountain peaks that stay well below player terrain
-      const peakVariation = Math.sin(seed * 1.5) * (60 + layerIndex * 20) + 
-                           Math.sin(seed * 4) * (30 + layerIndex * 10) +
-                           Math.sin(seed * 10) * (15 + layerIndex * 5)
-      
-      const mountainHeight = baseHeight + peakVariation
-      const y = Math.min(canvasHeight - mountainHeight, 680) // Never go above 680px
-      
-      graphics.lineTo(x, y)
+      // 12% density - very sparse mountains for distant background effect
+      if (Math.random() < 0.12) {
+        this.addRandomMountainSegment(
+          layer.container, 
+          x, 
+          layer.layerIndex, 
+          config.baseScale, 
+          config.yRange, 
+          alpha, 
+          blueTint
+        )
+      }
     }
     
-    graphics.lineTo(startX + width, canvasHeight)
-    graphics.closePath()
-    graphics.fillPath()
+    layer.lastExtendX += numNewSegments * segmentWidth
+    
+    // Always log extensions to track infinite generation
+    console.log(`🏔️ Extended mountain layer ${layer.layerIndex} to ${layer.lastExtendX}px (camera at ${Math.floor(layer.lastExtendX * layer.scrollFactor)})`)
   }
+
+  private cleanupOldMountainSegments(layer: { container: Phaser.GameObjects.Container, scrollFactor: number, layerIndex: number, lastExtendX: number }, virtualCameraX: number): void {
+    const cleanupDistance = GameSettings.canvas.width * 6 // Keep more segments for safety
+    const cleanupThreshold = virtualCameraX - cleanupDistance
+    
+    // Find and remove old segments
+    const children = layer.container.list.slice() // Copy array to avoid modification during iteration
+    let removedCount = 0
+    
+    children.forEach(child => {
+      const mountain = child as Phaser.GameObjects.Image
+      const segmentX = (mountain as any).segmentX || 0
+      
+      if (segmentX < cleanupThreshold) {
+        layer.container.remove(mountain)
+        mountain.destroy()
+        removedCount++
+      }
+    })
+    
+    if (removedCount > 0 && Math.random() < 0.1) { // 10% chance to log cleanup
+      console.log(`🧼 Cleaned up ${removedCount} old mountain segments from layer ${layer.layerIndex}`)
+    }
+  }
+
+
+
 
 
   private setupCamera(): void {
@@ -570,8 +631,9 @@ export class GameScene extends Phaser.Scene {
       // Update level generator for infinite terrain chunks
       this.levelGenerator.update(this.camera.scrollX)
       
-      // Update infinite parallax mountains
+      // Update infinite parallax mountains and grass (background is static)
       this.updateParallaxMountains(this.camera.scrollX)
+      this.updateGrassGround(this.camera.scrollX)
       
       // Manual token collection check (since Matter.js sensor events aren't working)
       this.checkTokenCollisions()
@@ -747,6 +809,22 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.levelGenerator) {
       this.levelGenerator.destroy()
+    }
+    
+    // Clean up parallax layers and grass
+    this.parallaxLayers.forEach(layer => {
+      if (layer.container) {
+        layer.container.destroy(true) // Destroy container and all children
+      }
+    })
+    this.parallaxLayers = []
+    
+    if (this.grassTile) {
+      this.grassTile.destroy()
+    }
+    
+    if (this.backgroundTile) {
+      this.backgroundTile.destroy()
     }
   }
 }

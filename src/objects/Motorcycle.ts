@@ -157,9 +157,10 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     
     // Add text label
     const debugText = this.scene.add.text(0, 55, 'COLLISION', {
-      fontSize: '10px',
+      fontSize: '8px',
       color: '#FF0000',
-      backgroundColor: '#FFFFFF'
+      backgroundColor: '#FFFFFF',
+      fontFamily: 'pressStart2P'
     })
     debugText.setOrigin(0.5, 0.5)
     

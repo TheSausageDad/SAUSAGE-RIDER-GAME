@@ -1352,9 +1352,10 @@ export class LevelGenerator {
       tokenHitbox.fillCircle(token.x, token.y, 15)
       
       const tokenLabel = this.scene.add.text(token.x, token.y - 25, 'TOKEN', {
-        fontSize: '8px',
+        fontSize: '6px',
         color: '#FFFF00',
-        backgroundColor: '#000000'
+        backgroundColor: '#000000',
+        fontFamily: 'pressStart2P'
       })
       tokenLabel.setOrigin(0.5, 0.5)
     })
@@ -1368,9 +1369,10 @@ export class LevelGenerator {
       spikeHitbox.fillRect(spike.x - 15, spike.y - 15, 30, 30)
       
       const spikeLabel = this.scene.add.text(spike.x, spike.y - 30, 'SPIKE', {
-        fontSize: '8px',
+        fontSize: '6px',
         color: '#FF0000',
-        backgroundColor: '#000000'
+        backgroundColor: '#000000',
+        fontFamily: 'pressStart2P'
       })
       spikeLabel.setOrigin(0.5, 0.5)
     })
@@ -1384,9 +1386,10 @@ export class LevelGenerator {
       platformHitbox.fillRect(platform.x - 50, platform.y - 10, 100, 20)
       
       const platformLabel = this.scene.add.text(platform.x, platform.y - 25, 'PLATFORM', {
-        fontSize: '8px',
+        fontSize: '6px',
         color: '#FF00FF',
-        backgroundColor: '#000000'
+        backgroundColor: '#000000',
+        fontFamily: 'pressStart2P'
       })
       platformLabel.setOrigin(0.5, 0.5)
     })
@@ -1395,10 +1398,11 @@ export class LevelGenerator {
     chunk.rails.forEach((rail, index) => {
       // Rails already have debug visuals, just add extra info
       const railInfoLabel = this.scene.add.text(rail.x, rail.y - 50, `RAIL ${index}\\n300x15px`, {
-        fontSize: '10px',
+        fontSize: '8px',
         color: '#00FF00',
         backgroundColor: '#000000',
-        align: 'center'
+        align: 'center',
+        fontFamily: 'pressStart2P'
       })
       railInfoLabel.setOrigin(0.5, 0.5)
     })
@@ -1421,9 +1425,10 @@ export class LevelGenerator {
       // Add terrain label
       const midPoint = chunk.terrainPath[Math.floor(chunk.terrainPath.length / 2)]
       const terrainLabel = this.scene.add.text(midPoint.x, midPoint.y - 20, 'TERRAIN', {
-        fontSize: '8px',
+        fontSize: '6px',
         color: '#0080FF',
-        backgroundColor: '#000000'
+        backgroundColor: '#000000',
+        fontFamily: 'pressStart2P'
       })
       terrainLabel.setOrigin(0.5, 0.5)
     }

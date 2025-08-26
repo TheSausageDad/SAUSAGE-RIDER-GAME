@@ -93,18 +93,20 @@ export class Rail extends Phaser.GameObjects.Container implements Poolable {
     
     // Add debug text labels
     const railText = this.scene.add.text(0, -this.height/2 - 35, 'RAIL SOLID', {
-      fontSize: '10px',
+      fontSize: '8px',
       color: '#00FF00',
       backgroundColor: '#000000',
-      padding: { x: 2, y: 1 }
+      padding: { x: 2, y: 1 },
+      fontFamily: 'pressStart2P'
     })
     railText.setOrigin(0.5, 0.5)
     
     const sensorText = this.scene.add.text(0, -this.height/2 - 20, 'GRIND SENSOR', {
-      fontSize: '10px',
+      fontSize: '8px',
       color: '#00FFFF',
       backgroundColor: '#000000',
-      padding: { x: 2, y: 1 }
+      padding: { x: 2, y: 1 },
+      fontFamily: 'pressStart2P'
     })
     sensorText.setOrigin(0.5, 0.5)
     

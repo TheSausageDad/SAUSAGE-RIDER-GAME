@@ -31,22 +31,22 @@ export class ScoreManager {
   private createUI(): void {
     // Score display in top-left - fixed to camera
     this.scoreText = this.scene.add.text(20, 20, this.getScoreDisplayText(), {
-      fontSize: '28px',
+      fontSize: '18px',
       color: '#ffffff',
-      fontFamily: 'Arial',
+      fontFamily: 'pressStart2P',
       stroke: '#000000',
-      strokeThickness: 3
+      strokeThickness: 2
     })
     this.scoreText.setDepth(1000)
     this.scoreText.setScrollFactor(0) // Fixed to camera
 
     // Spin counter in top-right - fixed to camera
     this.flipText = this.scene.add.text(GameSettings.canvas.width - 20, 20, `Spins: ${this.flips}`, {
-      fontSize: '24px',
+      fontSize: '16px',
       color: '#FFD700',
-      fontFamily: 'Arial',
+      fontFamily: 'pressStart2P',
       stroke: '#000000',
-      strokeThickness: 3
+      strokeThickness: 2
     })
     this.flipText.setOrigin(1, 0)
     this.flipText.setDepth(1000)
@@ -58,11 +58,11 @@ export class ScoreManager {
       GameSettings.canvas.height - 60,
       'HOLD SPACE/TAP: Jump & Spin | Release to auto-correct',
       {
-        fontSize: '20px',
+        fontSize: '12px',
         color: '#aaaaaa',
-        fontFamily: 'Arial',
+        fontFamily: 'pressStart2P',
         stroke: '#000000',
-        strokeThickness: 2,
+        strokeThickness: 1,
         align: 'center'
       }
     )
@@ -76,11 +76,11 @@ export class ScoreManager {
       100,
       'TURBO ACTIVE!',
       {
-        fontSize: '42px',
+        fontSize: '24px',
         color: '#FF0000',
-        fontFamily: 'Arial',
+        fontFamily: 'pressStart2P',
         stroke: '#FFFF00',
-        strokeThickness: 4
+        strokeThickness: 3
       }
     )
     this.turboText.setOrigin(0.5)
@@ -96,7 +96,7 @@ export class ScoreManager {
       {
         fontSize: '28px',
         color: '#FFD700',
-        fontFamily: 'Arial',
+        fontFamily: 'pressStart2P',
         stroke: '#8B4513', // Brown stroke for rail theme
         strokeThickness: 4,
         align: 'center'
@@ -153,7 +153,7 @@ export class ScoreManager {
       {
         fontSize: `${fontSize}px`,
         color: '#FFD700',
-        fontFamily: 'Arial',
+        fontFamily: 'pressStart2P',
         stroke: '#FF4500',
         strokeThickness: 4,
         align: 'center'
@@ -254,7 +254,7 @@ export class ScoreManager {
       {
         fontSize: '24px',
         color: '#FFD700',
-        fontFamily: 'Arial',
+        fontFamily: 'pressStart2P',
         stroke: '#8B4513', // Brown stroke for rail theme
         strokeThickness: 4,
         align: 'center'
@@ -299,7 +299,7 @@ export class ScoreManager {
       {
         fontSize: '24px',
         color: `#${color.toString(16).padStart(6, '0')}`,
-        fontFamily: 'Arial',
+        fontFamily: 'pressStart2P',
         stroke: '#000000',
         strokeThickness: 4
       }
@@ -420,7 +420,7 @@ export class ScoreManager {
       {
         fontSize: '72px',
         color: '#ff4444',
-        fontFamily: 'Arial',
+        fontFamily: 'pressStart2P',
         stroke: '#000000',
         strokeThickness: 4
       }
@@ -437,7 +437,7 @@ export class ScoreManager {
       {
         fontSize: '32px',
         color: '#ffffff',
-        fontFamily: 'Arial',
+        fontFamily: 'pressStart2P',
         stroke: '#000000',
         strokeThickness: 3,
         align: 'center'
@@ -455,7 +455,7 @@ export class ScoreManager {
       {
         fontSize: '28px',
         color: '#cccccc',
-        fontFamily: 'Arial',
+        fontFamily: 'pressStart2P',
         stroke: '#000000',
         strokeThickness: 2
       }
