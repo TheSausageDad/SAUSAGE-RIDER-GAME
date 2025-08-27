@@ -47,8 +47,9 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   private momentumMultiplier: number = 0.6 // How much speed converts to launch power
   
   public onFlipComplete: ((flips: number) => void) | null = null
-  public onLanding: (() => void) | null = null
+  public onLanding: ((hadTricks: boolean) => void) | null = null
   public onTrickComplete: ((tricks: string[], multiplier: number, airTime: number) => void) | null = null
+  public onJump: (() => void) | null = null
 
   // Snow trail particle system
   private snowParticles: Phaser.GameObjects.Particles.ParticleEmitter | null = null
@@ -62,6 +63,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   private grindParticles: Phaser.GameObjects.Particles.ParticleEmitter | null = null
   public onGrindStart: (() => void) | null = null
   public onGrindEnd: ((grindTime: number, grindScore: number) => void) | null = null
+  public onGrindSoundStart: (() => void) | null = null
+  public onGrindSoundStop: (() => void) | null = null
 
   constructor(scene: Phaser.Scene, x: number, y: number, terrain: DynamicTerrain, levelGenerator?: LevelGenerator) {
     super(scene, x, y)
@@ -282,20 +285,14 @@ export class Motorcycle extends Phaser.GameObjects.Container {
         // IMMEDIATE jump off rail - no delays or complex state management
         this.velocity.y = -this.jumpPower
         this.isOnGround = false
-        this.isGrinding = false
-        this.currentRail = null
-        this.grindScore = 0
         
-        // Stop grind particles immediately
-        if (this.grindParticles) {
-          this.grindParticles.stop()
+        // Trigger jump sound
+        if (this.onJump) {
+          this.onJump()
         }
         
-        // Hide grind display immediately
-        if (this.scene && (this.scene as any).scoreManager) {
-          const scoreManager = (this.scene as any).scoreManager
-          scoreManager.endGrindDisplay(this.grindScore, 0.1) // Very short grind time for immediate jump
-        }
+        // Properly stop grinding (this will stop sound and particles)
+        this.stopGrinding()
         
         // Longer flag to prevent immediate re-grinding (300ms)
         this.justJumpedOffRail = true
@@ -405,6 +402,12 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       this.velocity.y += jumpVelocityY
       
       this.isOnGround = false
+      
+      // Trigger jump sound
+      if (this.onJump) {
+        this.onJump()
+      }
+      
       console.log(`Snowboarder jumped! Power: ${jumpPower.toFixed(0)}, Speed: ${this.velocity.x.toFixed(0)}`)
     }
   }
@@ -862,13 +865,16 @@ export class Motorcycle extends Phaser.GameObjects.Container {
         this.riderSprite.setPosition(-10, 140); // Restore original position (adjusted for larger sprite)
         this.riderSprite.setScale(0.32); // Restore original scale (proportionally larger)
         
+        // Check if there were tricks before processing them
+        const hadTricks = this.currentTricks.length > 0 || this.airTime > 0.5
+        
         // Process trick combo on landing
         this.processLandingTricks()
         
         console.log("Snowboarder landed safely!")
         
         if (this.onLanding) {
-          this.onLanding()
+          this.onLanding(hadTricks)
         }
       } else {
         // Already on ground - check for momentum launches
@@ -1135,6 +1141,10 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       this.onGrindStart()
     }
     
+    if (this.onGrindSoundStart) {
+      this.onGrindSoundStart()
+    }
+    
     console.log(`🔵 GRIND STARTED: isGrinding=${this.isGrinding}, wasAirborne=${wasAirborne}`)
   }
 
@@ -1159,6 +1169,11 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     if (this.grindParticles) {
       this.grindParticles.stop()
       console.log(`🔴 GRIND PARTICLES STOPPED`)
+    }
+    
+    // Stop grind sound
+    if (this.onGrindSoundStop) {
+      this.onGrindSoundStop()
     }
     
     // Hide the persistent grind display

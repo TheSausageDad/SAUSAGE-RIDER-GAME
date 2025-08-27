@@ -5,6 +5,7 @@ import { LevelGenerator } from "../systems/LevelGenerator"
 import { InputManager } from "../systems/InputManager"
 import { ScoreManager } from "../systems/ScoreManager"
 import { GameObjectPools } from "../systems/ObjectPool"
+import { AudioManager } from "../systems/AudioManager"
 
 export class GameScene extends Phaser.Scene {
   private motorcycle!: Motorcycle
@@ -13,6 +14,7 @@ export class GameScene extends Phaser.Scene {
   private inputManager!: InputManager
   private scoreManager!: ScoreManager
   private objectPools!: GameObjectPools
+  private audioManager!: AudioManager
   
   private camera!: Phaser.Cameras.Scene2D.Camera
   private gameState: 'playing' | 'gameOver' = 'playing'
@@ -58,11 +60,18 @@ export class GameScene extends Phaser.Scene {
     
     // Load background music
     this.load.audio('backgroundMusic', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/SAUSAGE%20SLOPES%20LOOP-vMLQsxmXiEz3Ltd41e4EWcYBcP992E.mp3?SWZZ')
+    
+    // Load game audio through AudioManager
+    this.audioManager = new AudioManager(this)
+    this.audioManager.preloadAudio()
   }
 
   create(): void {
     // Create snow particle texture first
     this.createSnowParticleTexture()
+    
+    // Initialize audio manager
+    this.audioManager.createSounds()
     
     this.createGameObjects()
     this.setupCamera()
@@ -99,12 +108,21 @@ export class GameScene extends Phaser.Scene {
       this.scoreManager.addFlip()
     }
 
-    this.motorcycle.onLanding = () => {
+    this.motorcycle.onLanding = (hadTricks: boolean) => {
       console.log("Snowboarder landed!")
+      if (hadTricks) {
+        this.audioManager.playRandomLandingSound()
+        console.log("Playing landing sound - had tricks/air time!")
+      }
+    }
+
+    this.motorcycle.onJump = () => {
+      this.audioManager.playJumpSound()
     }
 
     this.motorcycle.onCrash = () => {
       console.log("Snowboarder crashed! Game Over!")
+      this.audioManager.playCrashSequence()
       this.gameOver()
     }
 
@@ -129,6 +147,14 @@ export class GameScene extends Phaser.Scene {
     this.motorcycle.onGrindEnd = (grindTime: number, grindScore: number) => {
       console.log(`Grind bonus completed! Time: ${grindTime.toFixed(2)}s, Score: ${grindScore}`)
       this.scoreManager.endGrindDisplay(grindScore, grindTime)
+    }
+
+    this.motorcycle.onGrindSoundStart = () => {
+      this.audioManager.startRailGrindSound()
+    }
+
+    this.motorcycle.onGrindSoundStop = () => {
+      this.audioManager.stopRailGrindSound()
     }
     
   }
@@ -824,6 +850,7 @@ export class GameScene extends Phaser.Scene {
       if (distanceSquared <= collectionRadiusSquared) {
         token.collect()
         this.scoreManager.addToken()
+        this.audioManager.playTokenCollectSound()
         
         // Return collected token to pool and remove from level generator
         this.objectPools.tokenPool.release(token)
@@ -889,6 +916,9 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.scoreManager) {
       this.scoreManager.destroy()
+    }
+    if (this.audioManager) {
+      this.audioManager.destroy()
     }
     if (this.terrain) {
       this.terrain.destroy()
