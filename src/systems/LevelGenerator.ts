@@ -227,33 +227,33 @@ export class LevelGenerator {
     
     console.log(`🌄 NEW TERRAIN: Random value ${terrainType.toFixed(3)} at chunk x:${x.toFixed(0)}, railCooldown: ${this.railCooldown}`)
     
-    if (terrainType < 0.05) {
-      // Rail grinding flat (2-3 chunks) - 5% chance (0.00-0.05) - MUCH LESS FREQUENT FOR TESTING
+    if (terrainType < 0.15) {
+      // Rail grinding flat (2-3 chunks) - 15% chance (0.00-0.15) - INCREASED FOR MORE RAIL ACTION
       this.currentTerrainType = 'rail_flat'
       this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for extended grinding
       this.targetHeight = this.lastChunkEndHeight // Keep perfectly flat
-      this.railCooldown = 0 // No cooldown for rare rails
-      console.log(`🚂 RARE RAILS: rail_flat terrain (${this.terrainLength} chunks) - 5% spawn rate for testing!`)
-    } else if (terrainType < 0.70) {
-      // Mini slopes (1-2 chunks) - quick elevation changes - 65% (0.05-0.70)
+      this.railCooldown = 0 // No cooldown for rails
+      console.log(`🚂 MORE RAILS: rail_flat terrain (${this.terrainLength} chunks) - 15% spawn rate!`)
+    } else if (terrainType < 0.45) {
+      // Mini slopes (1-2 chunks) - quick elevation changes - 30% (0.15-0.45)
       this.currentTerrainType = 'mini_slopes'
       this.terrainLength = 1 + Math.floor(Math.random() * 2) // 1-2 chunks (quick changes)
       this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 200 // ±100px changes
       console.log(`🌄 SELECTED: mini_slopes terrain (${this.terrainLength} chunks)`)
-    } else if (terrainType < 0.85) {
-      // Massive jumps (2-3 chunks) - 15% (0.70-0.85)
+    } else if (terrainType < 0.75) {
+      // Massive jumps (2-3 chunks) - 30% (0.45-0.75) - INCREASED FOR MORE BIG HILLS
       this.currentTerrainType = 'massive_jump'
       this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for big jumps
-      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 300 // ±150px variation with ramps
-      console.log(`🌄 SELECTED: massive_jump terrain (${this.terrainLength} chunks)`)
-    } else if (terrainType < 0.95) {
-      // Jump chain (3-4 chunks) - 2% (0.96-0.98)
+      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 400 // ±200px variation - BIGGER DROPS
+      console.log(`🏔️ BIG HILLS: massive_jump terrain (${this.terrainLength} chunks) - bigger drops!`)
+    } else if (terrainType < 0.90) {
+      // Jump chain (3-4 chunks) - 15% (0.75-0.90) - INCREASED FOR MORE EXCITEMENT
       this.currentTerrainType = 'jump_chain'
       this.terrainLength = 3 + Math.floor(Math.random() * 2) // 3-4 chunks for jump sequence
-      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 200 // ±100px base variation
+      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 300 // ±150px bigger variation
       console.log(`🚀 SELECTED: jump_chain terrain (${this.terrainLength} chunks)`)
     } else {
-      // Extended flat sections (1 chunk) - 2% (0.98-1.00)
+      // Extended flat sections (1 chunk) - 10% (0.90-1.00) - MORE BREATHING ROOM
       this.currentTerrainType = 'extended_flat'
       this.terrainLength = 1 // Just 1 chunk for brief flat sections
       this.targetHeight = this.lastChunkEndHeight // Keep current height

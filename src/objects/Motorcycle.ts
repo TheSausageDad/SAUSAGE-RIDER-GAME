@@ -485,6 +485,18 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       return false
     }
     
+    // FORGIVENESS: No crashes on gentle landings (low fall speed)
+    if (Math.abs(this.velocity.y) < 200) {
+      console.log(`✅ SAFE: Gentle landing - fall speed too low for crash (${Math.abs(this.velocity.y).toFixed(1)} < 200)`)
+      return false
+    }
+    
+    // FORGIVENESS: No crashes during first 0.5 seconds of air time (short hops)
+    if (this.airTime < 0.5) {
+      console.log(`✅ SAFE: Short hop - air time too brief for crash (${this.airTime.toFixed(2)}s < 0.5s)`)
+      return false
+    }
+    
     // Get terrain angle and height at player position
     let terrainHeight = GameSettings.level.groundY
     let terrainAngle = 0
@@ -516,8 +528,28 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       angleDifference = 360 - angleDifference
     }
     
-    // Extremely forgiving tolerance: 90° deviation allowed from terrain angle
-    const landingTolerance = 90
+    // Much more forgiving tolerance based on conditions
+    let landingTolerance = 120 // Base tolerance increased from 90° to 120°
+    
+    // Extra forgiveness for high speeds (more exciting, less punishing)
+    const currentSpeed = this.velocity.x
+    if (currentSpeed > this.maxSpeed * 0.8) {
+      landingTolerance += 30 // 150° total at high speed
+      console.log(`🚀 HIGH SPEED BONUS: +30° tolerance (${landingTolerance}°)`)
+    }
+    
+    // Extra forgiveness on steep terrain (harder to land perfectly)
+    const terrainSteepness = Math.abs(terrainAngleDeg)
+    if (terrainSteepness > 30) {
+      landingTolerance += 20 // +20° on steep slopes
+      console.log(`🏔️ STEEP TERRAIN BONUS: +20° tolerance (${landingTolerance}°)`)
+    }
+    
+    // Extreme forgiveness for very long falls (epic moments should be rewarded)
+    if (this.airTime > 2.0) {
+      landingTolerance += 40 // +40° for epic air time
+      console.log(`🌟 EPIC AIR BONUS: +40° tolerance (${landingTolerance}°)`)
+    }
     
     console.log(`🔍 LANDING CHECK: Player: ${playerRotationDeg.toFixed(1)}°, Terrain: ${terrainAngleDeg.toFixed(1)}°, Difference: ${angleDifference.toFixed(1)}°, Tolerance: ${landingTolerance}°`)
     
@@ -573,10 +605,10 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       
       if (Math.abs(deltaX) > railHalfWidth + exitBuffer) {
         console.log(`🔴 RAIL BOUNDARY EXIT: Player moved off rail`)
-        this.isGrinding = false
-        this.currentRail = null
-        this.isOnGround = false // Let physics determine ground state
-        if (this.grindParticles) this.grindParticles.stop()
+        
+        // Use stopGrinding() for consistent cleanup (includes display hiding)
+        this.stopGrinding()
+        this.isOnGround = false // Let physics determine ground state after stopping
       } else {
         // Follow rail slope for Y position
         if (Math.abs(railRotation) > 0.01) {

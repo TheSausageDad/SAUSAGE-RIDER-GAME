@@ -4,7 +4,6 @@ import { DynamicTerrain } from "../systems/DynamicTerrain"
 import { LevelGenerator } from "../systems/LevelGenerator"
 import { InputManager } from "../systems/InputManager"
 import { ScoreManager } from "../systems/ScoreManager"
-import { Rail } from "../objects/Rail"
 import { GameObjectPools } from "../systems/ObjectPool"
 
 export class GameScene extends Phaser.Scene {
@@ -17,6 +16,7 @@ export class GameScene extends Phaser.Scene {
   
   private camera!: Phaser.Cameras.Scene2D.Camera
   private gameState: 'playing' | 'gameOver' = 'playing'
+  private backgroundMusic!: Phaser.Sound.BaseSound
   
   // Parallax background layers with infinite mixed images
   private parallaxLayers: { container: Phaser.GameObjects.Container, scrollFactor: number, layerIndex: number, lastExtendX: number }[] = []
@@ -55,6 +55,9 @@ export class GameScene extends Phaser.Scene {
     
     // Load custom font
     this.load.font('pressStart2P', 'assets/fonts/Press_Start_2P/PressStart2P-Regular.ttf')
+    
+    // Load background music
+    this.load.audio('backgroundMusic', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/SAUSAGE%20SLOPES%20LOOP-vMLQsxmXiEz3Ltd41e4EWcYBcP992E.mp3?SWZZ')
   }
 
   create(): void {
@@ -64,6 +67,7 @@ export class GameScene extends Phaser.Scene {
     this.createGameObjects()
     this.setupCamera()
     this.setupManagers()
+    this.setupBackgroundMusic()
     
     this.startGame()
   }
@@ -127,12 +131,19 @@ export class GameScene extends Phaser.Scene {
       this.scoreManager.endGrindDisplay(grindScore, grindTime)
     }
     
-    // DEBUG: Create a test rail that player should definitely hit
-    this.time.delayedCall(2000, () => {
-      console.log("🔴 Creating immediate test rail at player position!")
-      const testRail = new Rail(this, this.motorcycle.x + 100, this.motorcycle.y)
-      console.log(`🔴 Test rail created at (${this.motorcycle.x + 100}, ${this.motorcycle.y})`)
+  }
+
+  private setupBackgroundMusic(): void {
+    // Create background music with looping
+    this.backgroundMusic = this.sound.add('backgroundMusic', {
+      volume: 0.6, // 60% volume so it's present but not overpowering
+      loop: true   // Loop continuously
     })
+    
+    // Start playing the music
+    this.backgroundMusic.play()
+    
+    console.log("🎵 Background music started and looping")
   }
 
   private createBackground(): void {
@@ -688,7 +699,6 @@ export class GameScene extends Phaser.Scene {
       
       // Player's vertical position relative to rail (negative = above rail)
       const verticalOffset = motorcycleY - rail.y
-      const playerVelY = this.motorcycle.body?.velocity?.y || 0
       
       // EXTREMELY GENEROUS thresholds for debugging
       const horizontalThreshold = 150 // Rail width is 300px, so 150 = half width

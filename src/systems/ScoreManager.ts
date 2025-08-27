@@ -191,9 +191,15 @@ export class ScoreManager {
   }
 
   public startGrindDisplay(): void {
-    this.grindText.setVisible(true)
-    this.grindText.setText('+0')
+    // Ensure clean start by stopping any existing animations
+    this.scene.tweens.killTweensOf(this.grindText)
+    
+    // Reset all properties before showing
+    this.grindText.setScale(1.0)
     this.grindText.setAlpha(1.0)
+    this.grindText.y = GameSettings.canvas.height / 2 - 50
+    this.grindText.setText('+0')
+    this.grindText.setVisible(true)
     
     // Add pulsing effect
     this.scene.tweens.add({
@@ -213,11 +219,16 @@ export class ScoreManager {
   }
   
   public endGrindDisplay(finalScore: number, grindTime: number): void {
-    // Stop pulsing animation
+    // Skip if already invisible or fading
+    if (!this.grindText.visible || this.grindText.alpha < 1.0) {
+      return
+    }
+    
+    // Stop all existing animations on grind text
     this.scene.tweens.killTweensOf(this.grindText)
     this.grindText.setScale(1.0)
     
-    // Fade out like normal trick text instead of hiding immediately
+    // Fade out like normal trick text
     this.scene.tweens.add({
       targets: this.grindText,
       y: this.grindText.y - 50,
@@ -226,11 +237,12 @@ export class ScoreManager {
       duration: 800,
       ease: 'Power2',
       onComplete: () => {
-        // Reset and hide after fade completes
+        // Complete reset and hide after fade
         this.grindText.setVisible(false)
         this.grindText.y = GameSettings.canvas.height / 2 - 50 // Reset position
         this.grindText.setScale(1.0)
         this.grindText.setAlpha(1.0) // Reset alpha for next time
+        console.log(`🎭 GRIND DISPLAY FADE COMPLETE`)
       }
     })
     
@@ -342,15 +354,28 @@ export class ScoreManager {
     // Clean up all floating popups (yellow score text, etc.)
     this.clearAllPopups()
     
-    // Hide and reset grind display
+    // Hide and reset grind display completely
     if (this.grindText) {
       this.scene.tweens.killTweensOf(this.grindText)
       this.grindText.setVisible(false)
       this.grindText.setScale(1.0)
+      this.grindText.setAlpha(1.0) // Reset alpha too
       this.grindText.y = GameSettings.canvas.height / 2 - 50
     }
     
     this.updateUI()
+  }
+  
+  public forceHideGrindDisplay(): void {
+    // Emergency cleanup for stuck grind displays
+    if (this.grindText) {
+      console.log(`🚨 FORCE HIDING grind display`)
+      this.scene.tweens.killTweensOf(this.grindText)
+      this.grindText.setVisible(false)
+      this.grindText.setScale(1.0)
+      this.grindText.setAlpha(1.0)
+      this.grindText.y = GameSettings.canvas.height / 2 - 50
+    }
   }
 
   public showGameOver(): void {
