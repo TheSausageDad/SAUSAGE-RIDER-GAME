@@ -31,7 +31,7 @@ export class ScoreManager {
   private createUI(): void {
     // Score display in top-left - fixed to camera
     this.scoreText = this.scene.add.text(20, 20, this.getScoreDisplayText(), {
-      fontSize: '18px',
+      fontSize: '14px',
       color: '#ffffff',
       fontFamily: 'pressStart2P',
       stroke: '#000000',
@@ -42,7 +42,7 @@ export class ScoreManager {
 
     // Spin counter in top-right - fixed to camera
     this.flipText = this.scene.add.text(GameSettings.canvas.width - 20, 20, `Spins: ${this.flips}`, {
-      fontSize: '16px',
+      fontSize: '12px',
       color: '#FFD700',
       fontFamily: 'pressStart2P',
       stroke: '#000000',
@@ -58,7 +58,7 @@ export class ScoreManager {
       GameSettings.canvas.height - 60,
       'HOLD SPACE/TAP: Jump & Spin | Release to auto-correct',
       {
-        fontSize: '12px',
+        fontSize: '10px',
         color: '#aaaaaa',
         fontFamily: 'pressStart2P',
         stroke: '#000000',
@@ -76,7 +76,7 @@ export class ScoreManager {
       100,
       'TURBO ACTIVE!',
       {
-        fontSize: '24px',
+        fontSize: '18px',
         color: '#FF0000',
         fontFamily: 'pressStart2P',
         stroke: '#FFFF00',
@@ -94,7 +94,7 @@ export class ScoreManager {
       GameSettings.canvas.height / 2 - 50,
       'RAIL GRIND!\n+0',
       {
-        fontSize: '28px',
+        fontSize: '20px',
         color: '#FFD700',
         fontFamily: 'pressStart2P',
         stroke: '#8B4513', // Brown stroke for rail theme
@@ -144,8 +144,8 @@ export class ScoreManager {
       trickText += ` x${multiplier}`
     }
     
-    // Show bigger popup for bigger scores - fixed to camera
-    const fontSize = Math.min(24 + (totalScore / 200), 36)
+    // Show bigger popup for bigger scores - fixed to camera (reduced size)
+    const fontSize = Math.min(16 + (totalScore / 300), 24)
     const popup = this.scene.add.text(
       GameSettings.canvas.width / 2, 
       GameSettings.canvas.height / 2 - 50, 
@@ -192,7 +192,7 @@ export class ScoreManager {
 
   public startGrindDisplay(): void {
     this.grindText.setVisible(true)
-    this.grindText.setText('RAIL GRIND!\n+0')
+    this.grindText.setText('+0')
     this.grindText.setAlpha(1.0)
     
     // Add pulsing effect
@@ -208,7 +208,7 @@ export class ScoreManager {
   
   public updateGrindDisplay(currentScore: number, grindTime: number): void {
     if (this.grindText.visible) {
-      this.grindText.setText(`RAIL GRIND!\n${grindTime.toFixed(1)}s\n+${currentScore}`)
+      this.grindText.setText(`+${currentScore}`)
     }
   }
   
@@ -217,20 +217,20 @@ export class ScoreManager {
     this.scene.tweens.killTweensOf(this.grindText)
     this.grindText.setScale(1.0)
     
-    // Final score display with fade out
-    this.grindText.setText(`RAIL GRIND COMPLETE!\n${grindTime.toFixed(1)}s\n+${finalScore}`)
-    
+    // Fade out like normal trick text instead of hiding immediately
     this.scene.tweens.add({
       targets: this.grindText,
-      y: this.grindText.y - 80,
+      y: this.grindText.y - 50,
       alpha: 0,
-      scale: 1.4,
-      duration: 2000,
-      ease: 'Power2.easeOut',
+      scale: 1.3,
+      duration: 800,
+      ease: 'Power2',
       onComplete: () => {
+        // Reset and hide after fade completes
         this.grindText.setVisible(false)
         this.grindText.y = GameSettings.canvas.height / 2 - 50 // Reset position
         this.grindText.setScale(1.0)
+        this.grindText.setAlpha(1.0) // Reset alpha for next time
       }
     })
     
@@ -240,55 +240,12 @@ export class ScoreManager {
   }
 
   public addGrindScore(grindScore: number, grindTime: number): void {
+    // Simply add the score without any popup - only the continuous grind display should show
     this.score += grindScore
     this.updateUI()
     
-    // Create grind bonus display
-    const grindText = `RAIL GRIND!\n${grindTime.toFixed(1)}s`
-    
-    // Show grind popup - fixed to camera
-    const popup = this.scene.add.text(
-      GameSettings.canvas.width / 2, 
-      GameSettings.canvas.height / 2 - 100, 
-      `${grindText}\n+${grindScore}`,
-      {
-        fontSize: '24px',
-        color: '#FFD700',
-        fontFamily: 'pressStart2P',
-        stroke: '#8B4513', // Brown stroke for rail theme
-        strokeThickness: 4,
-        align: 'center'
-      }
-    )
-    popup.setOrigin(0.5)
-    popup.setDepth(1001)
-    popup.setScrollFactor(0) // Fixed to camera
-    
-    // Track this popup for cleanup
-    this.activePopups.push(popup)
-
-    // Animation for grind bonus
-    this.scene.tweens.add({
-      targets: popup,
-      y: popup.y - 80,
-      alpha: 0,
-      scale: 1.4,
-      duration: 1500,
-      ease: 'Power2.easeOut',
-      onComplete: () => {
-        // Remove from tracking array when destroyed
-        const index = this.activePopups.indexOf(popup)
-        if (index > -1) {
-          this.activePopups.splice(index, 1)
-        }
-        popup.destroy()
-      }
-    })
-    
-    // Mild screen shake for grind completion
-    if (grindTime > 1.0) {
-      this.scene.cameras.main.shake(150, 0.01)
-    }
+    // No completion popup text - only the continuous grind display while riding
+    console.log(`Rail grind completed: ${grindTime.toFixed(2)}s, +${grindScore} points`)
   }
 
   private showScorePopup(points: number, color: number, text: string): void {
@@ -297,11 +254,11 @@ export class ScoreManager {
       GameSettings.canvas.height / 2 - 100, 
       text,
       {
-        fontSize: '24px',
+        fontSize: '12px',
         color: `#${color.toString(16).padStart(6, '0')}`,
         fontFamily: 'pressStart2P',
         stroke: '#000000',
-        strokeThickness: 4
+        strokeThickness: 3
       }
     )
     popup.setOrigin(0.5)
@@ -418,7 +375,7 @@ export class ScoreManager {
       GameSettings.canvas.height / 2 - 100,
       'GAME OVER',
       {
-        fontSize: '72px',
+        fontSize: '48px',
         color: '#ff4444',
         fontFamily: 'pressStart2P',
         stroke: '#000000',
@@ -435,7 +392,7 @@ export class ScoreManager {
       GameSettings.canvas.height / 2 + 20,
       `Final Score: ${this.score}\nSpins: ${this.flips}\nCoins: ${this.tokens}`,
       {
-        fontSize: '32px',
+        fontSize: '24px',
         color: '#ffffff',
         fontFamily: 'pressStart2P',
         stroke: '#000000',
@@ -453,7 +410,7 @@ export class ScoreManager {
       GameSettings.canvas.height / 2 + 150,
       'Tap to restart',
       {
-        fontSize: '28px',
+        fontSize: '20px',
         color: '#cccccc',
         fontFamily: 'pressStart2P',
         stroke: '#000000',

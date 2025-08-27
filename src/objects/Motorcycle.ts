@@ -29,7 +29,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   private airTime: number = 0 // Time in air for scoring
   private comboMultiplier: number = 1
   private currentTricks: string[] = [] // Track tricks in current combo
-  private justJumpedOffRail: boolean = false // Flag to prevent rail physics for one frame
+  public justJumpedOffRail: boolean = false // Flag to prevent rail physics for one frame
   private lastJumpTime: number = 0 // Timestamp of last jump to prevent double jumping
   
   // Crash detection
@@ -38,7 +38,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   // Continuous flip controls
   private isInputHeld: boolean = false
   private flipSpeed: number = 360 // degrees per second when flipping (reduced for slower rotation)
-  private autoCorrectSpeed: number = 90 // degrees per second for auto-correction (much slower to allow crashes)
+  private autoCorrectSpeed: number = 30 // degrees per second for auto-correction (much weaker to allow crashes)
   private isAutoCorreting: boolean = false
   
   // Momentum-based launching
@@ -55,7 +55,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
 
   // Rail grinding system
   public isGrinding: boolean = false
-  private currentRail: any = null // Reference to the rail being ground
+  public currentRail: any = null // Reference to the rail being ground
   private grindStartTime: number = 0
   private grindScore: number = 0
   private lastRailLogTime: number = 0
@@ -69,8 +69,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     this.terrain = terrain
     this.levelGenerator = levelGenerator!
     
-    // Add to scene first so container position is set
-    scene.add.existing(this)
+    // Add container to scene
+    scene.add.existing(this as any) // Type cast needed for Phaser container
     
     // Set depth to ensure motorcycle is visible above other objects
     this.setDepth(100)
@@ -157,7 +157,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     
     // Add text label
     const debugText = this.scene.add.text(0, 55, 'COLLISION', {
-      fontSize: '8px',
+      fontSize: '6px',
       color: '#FF0000',
       backgroundColor: '#FFFFFF',
       fontFamily: 'pressStart2P'
@@ -269,25 +269,58 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     const wasInputHeld = this.isInputHeld
     this.isInputHeld = isPressed
     
-    // Handle initial press for jumping - use forgiving ground detection for rolling hills
+    // Handle initial press for jumping
     if (isPressed && !wasInputHeld) {
       const currentTime = this.scene.time.now
       const timeSinceLastJump = currentTime - this.lastJumpTime
-      const jumpCooldown = 300 // 300ms cooldown to prevent double jumping
       
-      const canJumpStrict = this.isOnGround
-      const canJumpForgiving = this.canJumpFromGround()
+      // IMMEDIATE RAIL JUMP: Allow instant jumping when grinding
+      if (this.isGrinding) {
+        console.log(`🚂 IMMEDIATE RAIL JUMP: Jumping off rail instantly`)
+        this.lastJumpTime = currentTime
+        
+        // IMMEDIATE jump off rail - no delays or complex state management
+        this.velocity.y = -this.jumpPower
+        this.isOnGround = false
+        this.isGrinding = false
+        this.currentRail = null
+        this.grindScore = 0
+        
+        // Stop grind particles immediately
+        if (this.grindParticles) {
+          this.grindParticles.stop()
+        }
+        
+        // Hide grind display immediately
+        if (this.scene && (this.scene as any).scoreManager) {
+          const scoreManager = (this.scene as any).scoreManager
+          scoreManager.endGrindDisplay(this.grindScore, 0.1) // Very short grind time for immediate jump
+        }
+        
+        // Longer flag to prevent immediate re-grinding (300ms)
+        this.justJumpedOffRail = true
+        this.scene.time.delayedCall(300, () => {
+          this.justJumpedOffRail = false
+          console.log(`🟢 RAIL JUMP FLAG CLEARED: Can grind again`)
+        })
+        
+        console.log(`🚂 RAIL JUMP COMPLETE: velY=${this.velocity.y}, isGrinding=${this.isGrinding}`)
+        return
+      }
+      
+      // Normal ground jumping with cooldown
+      const jumpCooldown = 300
+      const canJumpStrict = this.isOnGround || this.canJumpFromGround()
       const cooldownPassed = timeSinceLastJump > jumpCooldown
       
-      if ((canJumpStrict || canJumpForgiving) && cooldownPassed) {
-        // First press while on/near ground = jump (more forgiving for rolling terrain)
-        console.log(`🦘 JUMP ALLOWED: strict=${canJumpStrict}, forgiving=${canJumpForgiving}, cooldown=${timeSinceLastJump.toFixed(0)}ms`)
+      if (canJumpStrict && cooldownPassed) {
+        console.log(`🦘 GROUND JUMP: on ground=${this.isOnGround}, canJump=${this.canJumpFromGround()}, cooldown=${timeSinceLastJump.toFixed(0)}ms`)
         this.lastJumpTime = currentTime
         this.jump()
         return
       } else {
-        const reason = !cooldownPassed ? `cooldown (${timeSinceLastJump.toFixed(0)}ms < ${jumpCooldown}ms)` : `ground detection`
-        console.log(`🚫 JUMP DENIED: ${reason}, strict=${canJumpStrict}, forgiving=${canJumpForgiving}`)
+        const reason = !cooldownPassed ? `cooldown (${timeSinceLastJump.toFixed(0)}ms < ${jumpCooldown}ms)` : `not on ground`
+        console.log(`🚫 JUMP DENIED: ${reason}, onGround=${canJumpStrict}`)
       }
     }
     
@@ -327,38 +360,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   }
 
   public jump(): void {
-    // Special handling for jumping off rails - MORE AGGRESSIVE
-    if (this.isGrinding) {
-      console.log("🟡 JUMP OFF RAIL: Starting jump sequence")
-      
-      // FIRST: Stop grinding immediately and clear all state
-      this.isGrinding = false
-      this.currentRail = null
-      this.lastScoreUpdate = 0
-      this.justJumpedOffRail = true // Prevent rail physics for one frame
-      console.log("🟡 JUMP: Grinding state cleared")
-      
-      // SECOND: Set proper jump physics
-      this.velocity.y = -this.jumpPower
-      this.isOnGround = false
-      console.log("🟡 JUMP: Set velocity.y to", -this.jumpPower, "and isOnGround to false")
-      
-      // THIRD: Stop particles
-      if (this.grindParticles) {
-        this.grindParticles.stop()
-        console.log("🟡 JUMP: Grind particles stopped")
-      }
-      
-      // FOURTH: Call onGrindEnd for any final scoring
-      const grindTime = (Date.now() - this.grindStartTime) / 1000
-      if (this.onGrindEnd && grindTime > 0.2) {
-        this.onGrindEnd(grindTime, this.grindScore)
-        console.log("🟡 JUMP: Final grind score reported")
-      }
-      
-      console.log("🟡 JUMP OFF RAIL COMPLETE: isGrinding:", this.isGrinding, "velY:", this.velocity.y)
-      return
-    }
+    // This method is now only used for ground jumping
+    // Rail jumping is handled directly in handleInput() for immediate response
     
     // Check if motorcycle is close enough to terrain to jump (more lenient than isOnGround)
     if (this.canJumpFromGround()) {
@@ -476,47 +479,56 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   }
 
   private checkForCrash(): boolean {
-    // Only crash if player is upside down AND their head hits the ground
-    const hitboxRadius = 22 // Circle collision body radius
-    
-    // Check if motorcycle is upside down (rotation between 90 and 270 degrees)
-    const normalizedRotation = ((this.rotation % (Math.PI * 2)) + (Math.PI * 2)) % (Math.PI * 2)
-    const isUpsideDown = normalizedRotation > Math.PI/2 && normalizedRotation < (Math.PI * 3/2)
-    
-    // If not upside down, no crash possible
-    if (!isUpsideDown) {
-      console.log(`✅ SAFE: Player not upside down (${(this.rotation * 180 / Math.PI).toFixed(1)}°)`)
+    // SAFETY CHECK: Only crash when landing from air, never when already on ground
+    if (this.isOnGround) {
+      console.log(`✅ SAFE: Player already on ground - no crash possible during ground movement`)
       return false
     }
     
-    // Player is upside down - check if head hits ground
-    const crashZoneHeight = hitboxRadius * 0.60 // Top 60% of the circle (head area)
-    
-    // Get terrain height at player position
+    // Get terrain angle and height at player position
     let terrainHeight = GameSettings.level.groundY
+    let terrainAngle = 0
+    
     if (this.levelGenerator) {
       terrainHeight = this.getTerrainHeightFromChunks(this.x)
+      terrainAngle = this.getTerrainAngleFromChunks(this.x)
     } else {
       terrainHeight = this.terrain.getHeightAtX(this.x)
+      // DynamicTerrain doesn't have getAngleAtX, so calculate it manually
+      const sampleDistance = 10
+      const leftHeight = this.terrain.getHeightAtX(this.x - sampleDistance)
+      const rightHeight = this.terrain.getHeightAtX(this.x + sampleDistance)
+      terrainAngle = Math.atan2(rightHeight - leftHeight, sampleDistance * 2)
     }
     
-    // Calculate the collision body center position (30px below container center)
-    const collisionBodyCenterY = this.y + 30
+    // Convert player rotation to degrees for easier calculation
+    const playerRotationDeg = (this.rotation * 180 / Math.PI) % 360
+    const terrainAngleDeg = terrainAngle * 180 / Math.PI
     
-    // Calculate the top of the crash zone (head area when upside down)
-    const crashZoneTopY = collisionBodyCenterY - hitboxRadius + crashZoneHeight
+    // Calculate the ideal landing angle (matching terrain slope)
+    const idealLandingAngle = terrainAngleDeg
     
-    // DEBUG: Always log crash check info
-    console.log(`🔍 CRASH CHECK: Player upside down (${(this.rotation * 180 / Math.PI).toFixed(1)}°), Head zone: ${crashZoneTopY.toFixed(1)}, Terrain: ${terrainHeight.toFixed(1)}, Diff: ${(crashZoneTopY - terrainHeight).toFixed(1)}`)
+    // Calculate how far off the player's rotation is from the ideal landing angle
+    let angleDifference = Math.abs(playerRotationDeg - idealLandingAngle)
     
-    // Check if the head area touches or penetrates the terrain while upside down
-    if (crashZoneTopY >= terrainHeight) {
-      console.log(`💥 CRASH DETECTED! Head hit ground while upside down! Head: ${crashZoneTopY.toFixed(1)}, Terrain: ${terrainHeight.toFixed(1)}`)
+    // Handle angle wrapping (e.g., -10° vs 350° should be 20° difference, not 360°)
+    if (angleDifference > 180) {
+      angleDifference = 360 - angleDifference
+    }
+    
+    // Extremely forgiving tolerance: 90° deviation allowed from terrain angle
+    const landingTolerance = 90
+    
+    console.log(`🔍 LANDING CHECK: Player: ${playerRotationDeg.toFixed(1)}°, Terrain: ${terrainAngleDeg.toFixed(1)}°, Difference: ${angleDifference.toFixed(1)}°, Tolerance: ${landingTolerance}°`)
+    
+    // Crash if player rotation doesn't match terrain angle within tolerance
+    if (angleDifference > landingTolerance) {
+      console.log(`💥 CRASH! Bad landing angle - difference: ${angleDifference.toFixed(1)}° > tolerance: ${landingTolerance}°`)
       return true
     }
     
-    console.log(`✅ SAFE: Head clear of terrain while upside down`)
-    return false // Safe - head is clear of terrain even while upside down
+    console.log(`✅ SAFE: Good landing angle within tolerance`)
+    return false
   }
 
   private checkAutoCorrection(): void {
@@ -544,59 +556,41 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     }
     
     if (this.isGrinding && this.currentRail && !this.justJumpedOffRail) {
-      // If player has significant upward velocity, they're jumping off - stop grinding
-      if (this.velocity.y < -100) { // Strong upward velocity indicates jump
-        console.log(`🟡 VELOCITY EXIT: Player jumping off rail with velY:${this.velocity.y.toFixed(1)}`)
-        this.stopGrinding()
-        this.isOnGround = false
-        return // Exit to allow normal physics
-      }
-      
-      const oldX = this.x
-      const oldY = this.y
-      
-      // Move along rail horizontally first
-      this.x += this.velocity.x * dt
-      
-      // CRITICAL FIX: Follow rail angle/slope instead of staying at fixed Y
+      // SIMPLIFIED RAIL PHYSICS: Just follow the rail, don't override jump velocity
       const railRotation = this.currentRail.rotation || 0
       const railCenterX = this.currentRail.x
       const railCenterY = this.currentRail.y
       
+      // Move horizontally along rail
+      this.x += this.velocity.x * dt
+      
       // Calculate player position relative to rail center
       const deltaX = this.x - railCenterX
       
-      // LENIENT RAIL BOUNDARY: Only exit if player is VERY far from rail
-      const railWidth = 300 // Rails are 300px wide (from Rail.ts)
-      const railHalfWidth = railWidth / 2
-      const lenientBuffer = 80 // Larger buffer to keep player on rail longer
+      // Check rail boundaries - exit if too far
+      const railHalfWidth = 150 // 300px wide rail / 2
+      const exitBuffer = 80
       
-      if (Math.abs(deltaX) > railHalfWidth + lenientBuffer) {
-        // Player has moved way beyond rail boundary - stop grinding
-        console.log(`🔴 LENIENT BOUNDARY EXIT: deltaX=${deltaX.toFixed(1)} > ${railHalfWidth + lenientBuffer}`)
-        this.stopGrinding()
-        this.isOnGround = false
-        return // Exit early to resume normal physics
-      } else if (Math.random() < 0.05) { // 5% chance to log position
-        console.log(`🟣 ON RAIL: deltaX=${deltaX.toFixed(1)}/${railHalfWidth + lenientBuffer}`)
-      }
-      
-      // Calculate Y position based on rail slope
-      if (Math.abs(railRotation) > 0.01) {
-        // Rail is angled - follow the slope
-        const slopeY = deltaX * Math.tan(railRotation)
-        this.y = railCenterY + slopeY - 20 // 20px above rail surface
+      if (Math.abs(deltaX) > railHalfWidth + exitBuffer) {
+        console.log(`🔴 RAIL BOUNDARY EXIT: Player moved off rail`)
+        this.isGrinding = false
+        this.currentRail = null
+        this.isOnGround = false // Let physics determine ground state
+        if (this.grindParticles) this.grindParticles.stop()
       } else {
-        // Flat rail - stay at fixed height
-        this.y = railCenterY - 20
-      }
-      
-      this.velocity.y = 0 // No independent vertical movement while grinding
-      this.isOnGround = true // Consider grinding as being "on ground" for physics consistency
-      
-      // Debug logging occasionally
-      if (Math.random() < 0.02) { // 2% chance to log
-        console.log(`🟣 RAIL PHYSICS: Player:(${this.x.toFixed(1)},${this.y.toFixed(1)}) Rail:(${railCenterX.toFixed(1)},${railCenterY.toFixed(1)}) deltaX:${deltaX.toFixed(1)}`)
+        // Follow rail slope for Y position
+        if (Math.abs(railRotation) > 0.01) {
+          const slopeY = deltaX * Math.tan(railRotation)
+          this.y = railCenterY + slopeY - 25
+        } else {
+          this.y = railCenterY - 25
+        }
+        
+        // Only set ground state if not jumping (don't override jump velocity)
+        if (this.velocity.y >= -50) {
+          this.velocity.y = 0
+          this.isOnGround = true
+        }
       }
     } else {
       // Normal terrain following mode
@@ -719,11 +713,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       Matter.Body.setVelocity(this.body, { x: this.velocity.x, y: this.velocity.y })
     }
     
-    // Clear the jump flag at the very end of the frame
-    if (this.justJumpedOffRail) {
-      this.justJumpedOffRail = false
-      console.log("🟡 JUMP FLAG CLEARED: Normal physics resumed after rail jump")
-    }
+    // Flag clearing is now handled by timer in handleInput() for precise timing
   }
 
   private updateVelocityBasedOnTerrain(dt: number): void {
@@ -1074,46 +1064,46 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   }
 
   public startGrinding(rail: any): void {
-    console.log(`🔵 ENTERING startGrinding() method`)
-    console.log(`🔵 Current isGrinding state: ${this.isGrinding}`)
-    
     if (this.isGrinding) {
-      console.log(`🔵 EARLY RETURN: Already grinding`)
       return // Already grinding
     }
     
-    console.log(`🔵 PROCEEDING WITH GRIND START at rail (${rail.x.toFixed(0)}, ${rail.y.toFixed(0)})`)
+    console.log(`🔵 STARTING GRIND at rail (${rail.x.toFixed(0)}, ${rail.y.toFixed(0)})`)
     
+    // Set grinding state
     this.isGrinding = true
     this.currentRail = rail
     this.grindStartTime = Date.now()
     this.grindScore = 0
-    this.lastScoreUpdate = Date.now() // Initialize scoring timer
+    this.lastScoreUpdate = Date.now()
     
-    console.log(`🔵 STATE SET: isGrinding=${this.isGrinding}, currentRail set, startTime=${this.grindStartTime}`)
-    
-    // Immediately snap player to rail position
-    this.alignToRail()
-    console.log(`🔵 RAIL ALIGNMENT COMPLETE`)
-    
-    // Start grind particle effects
-    if (this.grindParticles) {
-      this.grindParticles.start()
-      console.log(`🔵 GRIND PARTICLES STARTED`)
+    // Handle jump-onto-rail: smooth velocity transition
+    const wasAirborne = !this.isOnGround
+    if (wasAirborne) {
+      // Preserve horizontal momentum but dampen vertical velocity
+      this.velocity.y = Math.max(this.velocity.y * 0.3, -100) // Reduce fall speed smoothly
+      console.log(`🪂 SMOOTH AIR-TO-RAIL: Dampened velocity to ${this.velocity.y.toFixed(1)}`)
     }
     
-    // Stop snow trail while grinding
+    // Set ground state for rail grinding
+    this.isOnGround = true
+    
+    // Align to rail position
+    this.alignToRail()
+    
+    // Start visual effects
+    if (this.grindParticles) {
+      this.grindParticles.start()
+    }
     if (this.snowParticles) {
       this.snowParticles.stop()
-      console.log(`🔵 SNOW PARTICLES STOPPED`)
     }
     
     if (this.onGrindStart) {
       this.onGrindStart()
-      console.log(`🔵 GRIND START CALLBACK EXECUTED`)
     }
     
-    console.log(`🔵 startGrinding() COMPLETE - Final isGrinding state: ${this.isGrinding}`)
+    console.log(`🔵 GRIND STARTED: isGrinding=${this.isGrinding}, wasAirborne=${wasAirborne}`)
   }
 
   public stopGrinding(): void {
@@ -1137,6 +1127,13 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     if (this.grindParticles) {
       this.grindParticles.stop()
       console.log(`🔴 GRIND PARTICLES STOPPED`)
+    }
+    
+    // Hide the persistent grind display
+    if (this.scene && (this.scene as any).scoreManager) {
+      const scoreManager = (this.scene as any).scoreManager
+      scoreManager.endGrindDisplay(this.grindScore, grindTime)
+      console.log(`🔴 GRIND DISPLAY HIDDEN`)
     }
     
     console.log(`🔴 GRIND COMPLETE: Time: ${grindTime.toFixed(2)}s, Score: ${this.grindScore}, isGrinding now: ${this.isGrinding}`)
@@ -1250,20 +1247,4 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     console.log(`🔧 RAIL SNAP: Player aligned to rail at (${this.x.toFixed(0)}, ${this.y.toFixed(0)})`)
   }
 
-  private maintainRailAlignment(): void {
-    if (!this.isGrinding || !this.currentRail) return
-    
-    // Just update grinding effects and check for rail end
-    // Let physics handle the actual rail collision naturally
-    
-    // Check if player has moved past the end of the rail
-    const railStartX = this.currentRail.x - 150 // Rail is 300px wide
-    const railEndX = this.currentRail.x + 150
-    
-    if (this.x < railStartX || this.x > railEndX) {
-      console.log("🔴 Reached end of rail - stopping grind")
-      this.stopGrinding()
-      return
-    }
-  }
 }

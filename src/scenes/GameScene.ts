@@ -23,6 +23,11 @@ export class GameScene extends Phaser.Scene {
   private mountainImages = ['low-mountainscape', 'one-peak', 'two-peaks', 'higher-mountainscape']
   private grassTile!: Phaser.GameObjects.TileSprite
   private backgroundTile!: Phaser.GameObjects.TileSprite
+  
+  // Flying owls system
+  private owlSprites: Phaser.GameObjects.Image[] = []
+  private lastOwlSpawnTime: number = 0
+  private owlSpawnInterval: number = 3000 // 3 seconds between owl spawns
 
   constructor() {
     super({ key: "GameScene" })
@@ -44,6 +49,9 @@ export class GameScene extends Phaser.Scene {
     
     // Load static background image (furthest layer)
     this.load.image('background', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Snow%20Background-KfEe8V5zyq6R8WytKn6B5VKt6f67Ui.png?G00d')
+    
+    // Load flying owls
+    this.load.image('owls', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/owls-UY0BTW8XvtP77SMLfPVL0JiPXNM9Hk.png?eCCq')
     
     // Load custom font
     this.load.font('pressStart2P', 'assets/fonts/Press_Start_2P/PressStart2P-Regular.ttf')
@@ -635,6 +643,9 @@ export class GameScene extends Phaser.Scene {
       this.updateParallaxMountains(this.camera.scrollX)
       this.updateGrassGround(this.camera.scrollX)
       
+      // Update flying owls
+      this.updateOwls(_time, deltaTime)
+      
       // Manual token collection check (since Matter.js sensor events aren't working)
       this.checkTokenCollisions()
       
@@ -680,39 +691,56 @@ export class GameScene extends Phaser.Scene {
       const playerVelY = this.motorcycle.body?.velocity?.y || 0
       
       // EXTREMELY GENEROUS thresholds for debugging
-      const horizontalThreshold = 200 // Very wide detection
-      const verticalThreshold = 150   // Very tall detection
+      const horizontalThreshold = 150 // Rail width is 300px, so 150 = half width
+      const verticalThreshold = 15   // Very close to rail surface - must actually touch the visual rail
       
       // SIMPLIFIED RAIL DETECTION: One clear method
       const withinHorizontalRange = horizontalDistance <= horizontalThreshold
       const withinVerticalRange = verticalDistance <= verticalThreshold
       
-      // Re-enable velocity check with reasonable limits after velocity fix
+      // Enhanced velocity validation - respect jump momentum
       const reasonableVelocity = Math.abs(this.motorcycle.getVelocity().x) < 1500 // 50% over GameSettings maxSpeed
-      const validForGrinding = Math.abs(verticalOffset) <= 200 && reasonableVelocity
+      const jumpingUpward = this.motorcycle.getVelocity().y < -100 // Player jumping with significant upward velocity
+      const recentlyJumped = this.motorcycle.justJumpedOffRail
+      const validForGrinding = Math.abs(verticalOffset) <= 200 && reasonableVelocity && !jumpingUpward && !recentlyJumped
       
       // DEBUG: Show all detection attempts for rails we're close to
       if (horizontalDistance <= 150) { // Show if we're reasonably close
-        console.log(`🔍 RAIL ${i} CHECK: H:${horizontalDistance.toFixed(1)}/${horizontalThreshold}=${withinHorizontalRange} V:${verticalDistance.toFixed(1)}/${verticalThreshold}=${withinVerticalRange} vel:${this.motorcycle.getVelocity().x.toFixed(1)} reasonable:${reasonableVelocity} validGrind:${validForGrinding}`)
+        console.log(`🔍 RAIL ${i} CHECK: H:${horizontalDistance.toFixed(1)}/${horizontalThreshold}=${withinHorizontalRange} V:${verticalDistance.toFixed(1)}/${verticalThreshold}=${withinVerticalRange} validGrind:${validForGrinding}`)
         if (!validForGrinding) {
-          console.log(`  - Invalid because: offset=${Math.abs(verticalOffset).toFixed(1)}>200? ${Math.abs(verticalOffset) > 200} vel=${this.motorcycle.getVelocity().x.toFixed(1)}>1500? ${!reasonableVelocity}`)
+          const velY = this.motorcycle.getVelocity().y.toFixed(1)
+          console.log(`  - Invalid because: jumpingUp=${jumpingUpward}(velY=${velY}<-100) recentJump=${recentlyJumped} offset=${Math.abs(verticalOffset).toFixed(1)}>200? ${Math.abs(verticalOffset) > 200} vel=${this.motorcycle.getVelocity().x.toFixed(1)}>1500? ${!reasonableVelocity}`)
         }
       }
       
-      // IMPROVED: Simple but reliable rail detection
+      // ENHANCED RAIL DETECTION: Support both ground and air rail mounting
       if (withinHorizontalRange && withinVerticalRange && validForGrinding) {
-        console.log(`🟢 RAIL CONTACT: Player touching rail ${i}`)
+        console.log(`🟢 RAIL CONTACT: Player touching rail ${i}, isGrinding=${this.motorcycle.isGrinding}, jumpedOffFlag=${this.motorcycle.justJumpedOffRail}`)
         isCurrentlyOnRail = true
         
-        // Start grinding if not already grinding
-        if (!this.motorcycle.isGrinding) {
-          console.log(`🟢 STARTING GRIND on rail ${i}`)
+        // Check if player is approaching rail from air (jump-onto-rail) - only when falling
+        const isAirborne = !this.motorcycle.isOnGround
+        const fallingDown = this.motorcycle.getVelocity().y > 50 // Must be falling, not jumping up
+        const approachingFromAbove = this.motorcycle.y < rail.y - 10 // Above rail level
+        const canMountFromAir = isAirborne && fallingDown && approachingFromAbove && !recentlyJumped
+        
+        // Start grinding if not already grinding AND not jumping off a rail
+        if (!this.motorcycle.isGrinding && !this.motorcycle.justJumpedOffRail) {
+          if (canMountFromAir) {
+            console.log(`🪂 JUMP-ONTO-RAIL: Mounting rail ${i} from air`)
+          } else {
+            console.log(`🟢 STARTING GRIND on rail ${i}`)
+          }
           this.motorcycle.startGrinding(rail)
-        } else if (this.motorcycle.currentRail !== rail) {
-          // Switch to new rail if we're already grinding a different one
+        } else if (this.motorcycle.currentRail !== rail && !this.motorcycle.justJumpedOffRail) {
+          // Switch to new rail if we're already grinding a different one AND not jumping
           console.log(`🟢 SWITCHING RAILS from rail to rail ${i}`)
           this.motorcycle.stopGrinding()
           this.motorcycle.startGrinding(rail)
+        } else if (this.motorcycle.justJumpedOffRail) {
+          console.log(`🚀 IGNORING RAIL CONTACT: Player jumping off rail`)
+        } else {
+          console.log(`🔄 RAIL CONTACT CONDITIONS: grinding=${this.motorcycle.isGrinding}, jumpFlag=${this.motorcycle.justJumpedOffRail}, currentRail=${this.motorcycle.currentRail?.x || 'none'}`)
         }
         break // Only grind one rail at a time
       }
@@ -796,6 +824,54 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private updateOwls(time: number, deltaTime: number): void {
+    // Spawn new owls occasionally
+    if (time - this.lastOwlSpawnTime > this.owlSpawnInterval) {
+      this.spawnOwl()
+      this.lastOwlSpawnTime = time
+      // Randomize next spawn interval (2-5 seconds)
+      this.owlSpawnInterval = 2000 + Math.random() * 3000
+    }
+    
+    // Update existing owls
+    for (let i = this.owlSprites.length - 1; i >= 0; i--) {
+      const owl = this.owlSprites[i]
+      
+      // Move owl to the left (independent of scroll factor)
+      owl.x -= 120 * (deltaTime / 1000) // 120 pixels per second
+      
+      // Add gentle up and down movement
+      const time_ms = time * 0.001
+      owl.y += Math.sin(time_ms + i * 2) * 0.8 // Gentle bobbing
+      
+      // Remove owl when it goes off screen (check against actual camera position)
+      const cameraLeft = this.camera.scrollX - 300
+      if (owl.x < cameraLeft) {
+        console.log(`🦉 Removing owl at x=${owl.x}, camera left=${cameraLeft}`)
+        owl.destroy()
+        this.owlSprites.splice(i, 1)
+      }
+    }
+  }
+  
+  private spawnOwl(): void {
+    // Spawn owl on the right side of screen, behind mountains
+    // Since scroll factor is 0.1, we need to position them in world space, not camera space
+    const spawnX = this.camera.scrollX + this.camera.width + 100 + Math.random() * 200
+    const spawnY = 150 + Math.random() * 200 // Between y=150 and y=350 (above mountains)
+    
+    const owl = this.add.image(spawnX, spawnY, 'owls')
+    owl.setScale(0.3 + Math.random() * 0.2) // Random size between 0.3 and 0.5
+    owl.setDepth(5) // Behind mountains (which are depth 10+)
+    owl.setScrollFactor(0.5) // Medium parallax - not too slow
+    owl.setAlpha(0.9) // Less transparent
+    
+    // Add to owl array for tracking
+    this.owlSprites.push(owl)
+    
+    console.log(`🦉 Spawned owl at (${spawnX}, ${spawnY}) with scroll factor 0.5 - total owls: ${this.owlSprites.length}`)
+  }
+
   // --- Scene Shutdown Logic ---
   shutdown(): void {
     if (this.inputManager) {
@@ -826,5 +902,13 @@ export class GameScene extends Phaser.Scene {
     if (this.backgroundTile) {
       this.backgroundTile.destroy()
     }
+    
+    // Clean up owls
+    this.owlSprites.forEach(owl => {
+      if (owl && owl.active) {
+        owl.destroy()
+      }
+    })
+    this.owlSprites = []
   }
 }

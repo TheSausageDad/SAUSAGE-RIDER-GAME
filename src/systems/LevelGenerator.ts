@@ -227,85 +227,33 @@ export class LevelGenerator {
     
     console.log(`🌄 NEW TERRAIN: Random value ${terrainType.toFixed(3)} at chunk x:${x.toFixed(0)}, railCooldown: ${this.railCooldown}`)
     
-    if (terrainType < 0.30) {
-      // Epic long downhills (4-8 chunks) - for massive speed building - 30%
-      this.currentTerrainType = 'epic_downhill'
-      this.terrainLength = 4 + Math.floor(Math.random() * 5) // 4-8 chunks (very long downhills)
-      this.targetHeight = this.lastChunkEndHeight + 400 + Math.random() * 600 // Go down 400-1000px total (very deep)
-      this.targetHeight = Math.min(this.targetHeight, GameSettings.level.groundY + 600) // Allow very deep downhills
-      console.log(`🌄 SELECTED: epic_downhill terrain (${this.terrainLength} chunks)`)
-    } else if (terrainType < 0.55) {
-      // Steep challenging uphills (3-6 chunks) - more exciting climbs - 25%
-      this.currentTerrainType = 'steep_uphill'
-      this.terrainLength = 3 + Math.floor(Math.random() * 4) // 3-6 chunks (longer uphills)
-      this.targetHeight = this.lastChunkEndHeight - 250 - Math.random() * 300 // Go up 250-550px total (steeper)
-      this.targetHeight = Math.max(this.targetHeight, GameSettings.level.groundY - 500) // Allow higher peaks
-      console.log(`🌄 SELECTED: steep_uphill terrain (${this.terrainLength} chunks)`)
-    } else if (terrainType < 0.68) {
-      // Dramatic hills with multiple elevation changes (3-5 chunks) - 13%
-      this.currentTerrainType = 'dramatic_hills'
-      this.terrainLength = 3 + Math.floor(Math.random() * 3) // 3-5 chunks for complex terrain
-      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 400 // ±200px variation
-      console.log(`🌄 SELECTED: dramatic_hills terrain (${this.terrainLength} chunks)`)
-    } else if (terrainType < 0.78) {
-      // Mini slopes (1-2 chunks) - quick elevation changes - 10%
+    if (terrainType < 0.05) {
+      // Rail grinding flat (2-3 chunks) - 5% chance (0.00-0.05) - MUCH LESS FREQUENT FOR TESTING
+      this.currentTerrainType = 'rail_flat'
+      this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for extended grinding
+      this.targetHeight = this.lastChunkEndHeight // Keep perfectly flat
+      this.railCooldown = 0 // No cooldown for rare rails
+      console.log(`🚂 RARE RAILS: rail_flat terrain (${this.terrainLength} chunks) - 5% spawn rate for testing!`)
+    } else if (terrainType < 0.70) {
+      // Mini slopes (1-2 chunks) - quick elevation changes - 65% (0.05-0.70)
       this.currentTerrainType = 'mini_slopes'
       this.terrainLength = 1 + Math.floor(Math.random() * 2) // 1-2 chunks (quick changes)
       this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 200 // ±100px changes
       console.log(`🌄 SELECTED: mini_slopes terrain (${this.terrainLength} chunks)`)
-    } else if (terrainType < 0.88) {
-      // Massive jumps (2-3 chunks) - big air opportunities - 12% (increased from 7%)
+    } else if (terrainType < 0.85) {
+      // Massive jumps (2-3 chunks) - 15% (0.70-0.85)
       this.currentTerrainType = 'massive_jump'
       this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for big jumps
       this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 300 // ±150px variation with ramps
       console.log(`🌄 SELECTED: massive_jump terrain (${this.terrainLength} chunks)`)
-    } else if (terrainType < 0.91) {
-      // Jump chain (3-4 chunks) - multiple consecutive jumps - 3% (NEW!)
+    } else if (terrainType < 0.95) {
+      // Jump chain (3-4 chunks) - 2% (0.96-0.98)
       this.currentTerrainType = 'jump_chain'
       this.terrainLength = 3 + Math.floor(Math.random() * 2) // 3-4 chunks for jump sequence
       this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 200 // ±100px base variation
       console.log(`🚀 SELECTED: jump_chain terrain (${this.terrainLength} chunks)`)
-    } else if (terrainType < 0.94) {
-      // Speed valleys (2-4 chunks) - momentum building dips - 3%
-      this.currentTerrainType = 'speed_valley'
-      this.terrainLength = 2 + Math.floor(Math.random() * 3) // 2-4 chunks for extended valleys
-      this.targetHeight = this.lastChunkEndHeight + 200 + Math.random() * 200 // Go down 200-400px for speed building
-      console.log(`🌄 SELECTED: speed_valley terrain (${this.terrainLength} chunks)`)
-    } else if (terrainType < 0.95) {
-      // Rail grinding flat (2-3 chunks) - RARE (5% chance)
-      if (this.railCooldown > 0 || this.previousTerrainType === 'rail_flat' || this.previousTerrainType === 'rail_downhill') {
-        console.log(`🚫 RAIL ANTI-CLUSTER: Skipping rail_flat (cooldown: ${this.railCooldown}, previous: ${this.previousTerrainType})`)
-        // Force different terrain instead
-        this.currentTerrainType = 'dramatic_hills'
-        this.terrainLength = 3 + Math.floor(Math.random() * 3)
-        this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 400
-        console.log(`🌄 ANTI-CLUSTER SELECTED: dramatic_hills terrain (${this.terrainLength} chunks)`)
-      } else {
-        this.currentTerrainType = 'rail_flat'
-        this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for extended grinding
-        this.targetHeight = this.lastChunkEndHeight // Keep perfectly flat
-        this.railCooldown = 5 + Math.floor(Math.random() * 3) // 5-7 chunk cooldown (much longer)
-        console.log(`🚂 SELECTED: rail_flat terrain (${this.terrainLength} chunks) - RARE! Cooldown set to ${this.railCooldown}`)
-      }
-    } else if (terrainType < 0.98) {
-      // Rail grinding downhill (3-4 chunks) - VERY RARE (3% chance)
-      if (this.railCooldown > 0 || this.previousTerrainType === 'rail_flat' || this.previousTerrainType === 'rail_downhill') {
-        console.log(`🚫 RAIL ANTI-CLUSTER: Skipping rail_downhill (cooldown: ${this.railCooldown}, previous: ${this.previousTerrainType})`)
-        // Force a different terrain type - pick epic downhill instead  
-        this.currentTerrainType = 'epic_downhill'
-        this.terrainLength = 4 + Math.floor(Math.random() * 5) // 4-8 chunks
-        this.targetHeight = this.lastChunkEndHeight + 400 + Math.random() * 600 // Big downhill
-        console.log(`🌄 ANTI-CLUSTER SELECTED: epic_downhill terrain (${this.terrainLength} chunks)`)
-      } else {
-        // Normal rail_downhill selection
-        this.currentTerrainType = 'rail_downhill'
-        this.terrainLength = 3 + Math.floor(Math.random() * 2) // 3-4 chunks for extended grinding (900-1200px)
-        this.targetHeight = this.lastChunkEndHeight + 150 + Math.random() * 150 // Gentle 150-300px downhill for speed
-        this.railCooldown = 6 + Math.floor(Math.random() * 3) // 6-8 chunk cooldown (very long)
-        console.log(`🚂 SELECTED: rail_downhill terrain (${this.terrainLength} chunks) - VERY RARE! Cooldown set to ${this.railCooldown}`)
-      }
     } else {
-      // Extended flat sections (1 chunk) - minimal breathing room
+      // Extended flat sections (1 chunk) - 2% (0.98-1.00)
       this.currentTerrainType = 'extended_flat'
       this.terrainLength = 1 // Just 1 chunk for brief flat sections
       this.targetHeight = this.lastChunkEndHeight // Keep current height
@@ -1282,9 +1230,9 @@ export class LevelGenerator {
     const midIndex = Math.floor(chunk.terrainPath.length / 2)
     const railPosition = chunk.terrainPath[midIndex]
     
-    // Position rail higher so players must jump to grind
+    // Position rail close to terrain for easy grinding
     const railX = railPosition.x
-    const railY = railPosition.y - 50 // Place 50px above terrain - requires jump to reach
+    const railY = railPosition.y - 30 // Place 30px above terrain
     
     const rail = this.objectPools.railPool.get(railX, railY)
     
@@ -1352,7 +1300,7 @@ export class LevelGenerator {
       tokenHitbox.fillCircle(token.x, token.y, 15)
       
       const tokenLabel = this.scene.add.text(token.x, token.y - 25, 'TOKEN', {
-        fontSize: '6px',
+        fontSize: '5px',
         color: '#FFFF00',
         backgroundColor: '#000000',
         fontFamily: 'pressStart2P'
@@ -1369,7 +1317,7 @@ export class LevelGenerator {
       spikeHitbox.fillRect(spike.x - 15, spike.y - 15, 30, 30)
       
       const spikeLabel = this.scene.add.text(spike.x, spike.y - 30, 'SPIKE', {
-        fontSize: '6px',
+        fontSize: '5px',
         color: '#FF0000',
         backgroundColor: '#000000',
         fontFamily: 'pressStart2P'
@@ -1386,7 +1334,7 @@ export class LevelGenerator {
       platformHitbox.fillRect(platform.x - 50, platform.y - 10, 100, 20)
       
       const platformLabel = this.scene.add.text(platform.x, platform.y - 25, 'PLATFORM', {
-        fontSize: '6px',
+        fontSize: '5px',
         color: '#FF00FF',
         backgroundColor: '#000000',
         fontFamily: 'pressStart2P'
@@ -1398,7 +1346,7 @@ export class LevelGenerator {
     chunk.rails.forEach((rail, index) => {
       // Rails already have debug visuals, just add extra info
       const railInfoLabel = this.scene.add.text(rail.x, rail.y - 50, `RAIL ${index}\\n300x15px`, {
-        fontSize: '8px',
+        fontSize: '6px',
         color: '#00FF00',
         backgroundColor: '#000000',
         align: 'center',
@@ -1425,7 +1373,7 @@ export class LevelGenerator {
       // Add terrain label
       const midPoint = chunk.terrainPath[Math.floor(chunk.terrainPath.length / 2)]
       const terrainLabel = this.scene.add.text(midPoint.x, midPoint.y - 20, 'TERRAIN', {
-        fontSize: '6px',
+        fontSize: '5px',
         color: '#0080FF',
         backgroundColor: '#000000',
         fontFamily: 'pressStart2P'

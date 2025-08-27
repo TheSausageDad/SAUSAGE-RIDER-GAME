@@ -93,7 +93,7 @@ export class Rail extends Phaser.GameObjects.Container implements Poolable {
     
     // Add debug text labels
     const railText = this.scene.add.text(0, -this.height/2 - 35, 'RAIL SOLID', {
-      fontSize: '8px',
+      fontSize: '6px',
       color: '#00FF00',
       backgroundColor: '#000000',
       padding: { x: 2, y: 1 },
@@ -102,7 +102,7 @@ export class Rail extends Phaser.GameObjects.Container implements Poolable {
     railText.setOrigin(0.5, 0.5)
     
     const sensorText = this.scene.add.text(0, -this.height/2 - 20, 'GRIND SENSOR', {
-      fontSize: '8px',
+      fontSize: '6px',
       color: '#00FFFF',
       backgroundColor: '#000000',
       padding: { x: 2, y: 1 },
@@ -116,12 +116,12 @@ export class Rail extends Phaser.GameObjects.Container implements Poolable {
   }
 
   private setupPhysics(): void {
-    // Create one-way platform physics body - solid from above, passthrough from below
+    // Create rail collision body - make it a sensor during grinding to prevent bouncing
     this.body = this.scene.matter.add.rectangle(
       this.x, this.y, this.width, this.height,
       {
         isStatic: true,
-        isSensor: false, // Solid platform
+        isSensor: true, // Make it a sensor to prevent collision during grinding
         friction: 0.02, // Low friction for smooth sliding
         frictionStatic: 0.02,
         restitution: 0.1, // Slight bounce for realistic feel
