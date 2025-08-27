@@ -227,37 +227,49 @@ export class LevelGenerator {
     
     console.log(`🌄 NEW TERRAIN: Random value ${terrainType.toFixed(3)} at chunk x:${x.toFixed(0)}, railCooldown: ${this.railCooldown}`)
     
-    if (terrainType < 0.15) {
-      // Rail grinding flat (2-3 chunks) - 15% chance (0.00-0.15) - INCREASED FOR MORE RAIL ACTION
-      this.currentTerrainType = 'rail_flat'
-      this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for extended grinding
-      this.targetHeight = this.lastChunkEndHeight // Keep perfectly flat
-      this.railCooldown = 0 // No cooldown for rails
-      console.log(`🚂 MORE RAILS: rail_flat terrain (${this.terrainLength} chunks) - 15% spawn rate!`)
+    if (terrainType < 0.25) {
+      // Gradual downhills (3-5 chunks) - 25% chance for speed building
+      this.currentTerrainType = 'epic_downhill'
+      this.terrainLength = 3 + Math.floor(Math.random() * 3) // 3-5 chunks for gradual descent
+      this.targetHeight = this.lastChunkEndHeight + 200 + Math.random() * 300 // 200-500px downhill
+      console.log(`⬇️ GRADUAL DOWNHILL: epic_downhill terrain (${this.terrainLength} chunks)`)
     } else if (terrainType < 0.45) {
-      // Mini slopes (1-2 chunks) - quick elevation changes - 30% (0.15-0.45)
+      // Smooth uphills (2-4 chunks) - 20% chance for momentum challenges
+      this.currentTerrainType = 'steep_uphill'
+      this.terrainLength = 2 + Math.floor(Math.random() * 3) // 2-4 chunks for gradual climb
+      this.targetHeight = this.lastChunkEndHeight - 150 - Math.random() * 200 // 150-350px uphill
+      console.log(`⬆️ SMOOTH UPHILL: steep_uphill terrain (${this.terrainLength} chunks)`)
+    } else if (terrainType < 0.65) {
+      // Rolling hills (3-5 chunks) - 20% chance for varied terrain
+      this.currentTerrainType = 'dramatic_hills'
+      this.terrainLength = 3 + Math.floor(Math.random() * 3) // 3-5 chunks for rolling landscape
+      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 200 // ±100px variation
+      console.log(`🌊 ROLLING HILLS: dramatic_hills terrain (${this.terrainLength} chunks)`)
+    } else if (terrainType < 0.80) {
+      // Gentle slopes (2-3 chunks) - 15% chance for quick elevation changes
       this.currentTerrainType = 'mini_slopes'
-      this.terrainLength = 1 + Math.floor(Math.random() * 2) // 1-2 chunks (quick changes)
-      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 200 // ±100px changes
-      console.log(`🌄 SELECTED: mini_slopes terrain (${this.terrainLength} chunks)`)
-    } else if (terrainType < 0.75) {
-      // Massive jumps (2-3 chunks) - 30% (0.45-0.75) - INCREASED FOR MORE BIG HILLS
-      this.currentTerrainType = 'massive_jump'
-      this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for big jumps
-      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 400 // ±200px variation - BIGGER DROPS
-      console.log(`🏔️ BIG HILLS: massive_jump terrain (${this.terrainLength} chunks) - bigger drops!`)
+      this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for gentle changes
+      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 150 // ±75px gentle changes
+      console.log(`🌄 GENTLE SLOPES: mini_slopes terrain (${this.terrainLength} chunks)`)
     } else if (terrainType < 0.90) {
-      // Jump chain (3-4 chunks) - 15% (0.75-0.90) - INCREASED FOR MORE EXCITEMENT
-      this.currentTerrainType = 'jump_chain'
-      this.terrainLength = 3 + Math.floor(Math.random() * 2) // 3-4 chunks for jump sequence
-      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 300 // ±150px bigger variation
-      console.log(`🚀 SELECTED: jump_chain terrain (${this.terrainLength} chunks)`)
+      // Big jump hills (2-3 chunks) - 10% chance for exciting jumps
+      this.currentTerrainType = 'massive_jump'
+      this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for jump setup
+      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 300 // ±150px for jump variety
+      console.log(`🏔️ BIG JUMP HILLS: massive_jump terrain (${this.terrainLength} chunks)`)
+    } else if (terrainType < 0.95 && this.railCooldown === 0) {
+      // Rail sections (2-3 chunks) - 5% chance when available
+      this.currentTerrainType = 'rail_flat'
+      this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for rail grinding
+      this.targetHeight = this.lastChunkEndHeight // Keep current height for rails
+      this.railCooldown = 0 // Reset cooldown
+      console.log(`🚂 RAIL GRINDING: rail_flat terrain (${this.terrainLength} chunks)`)
     } else {
-      // Extended flat sections (1 chunk) - 10% (0.90-1.00) - MORE BREATHING ROOM
+      // Flat breathing room (1-2 chunks) - 5-10% chance
       this.currentTerrainType = 'extended_flat'
-      this.terrainLength = 1 // Just 1 chunk for brief flat sections
+      this.terrainLength = 1 + Math.floor(Math.random() * 2) // 1-2 chunks for rest
       this.targetHeight = this.lastChunkEndHeight // Keep current height
-      console.log(`🌄 SELECTED: extended_flat terrain (${this.terrainLength} chunks)`)
+      console.log(`➡️ FLAT SECTION: extended_flat terrain (${this.terrainLength} chunks)`)
     }
     
     this.terrainProgress = 0
@@ -568,12 +580,12 @@ export class LevelGenerator {
   private createSteepUphill(chunk: LevelChunk, x: number, width: number, progress: number): void {
     const startHeight = this.lastChunkEndHeight
     
-    // Steep uphills with challenging but achievable grades
+    // Smooth, gradual uphills with gentle curves
     const smoothProgress = this.easeInOutQuad(progress)
     const endHeight = startHeight + (this.targetHeight - startHeight) * smoothProgress
     
     const pathPoints = []
-    const numPoints = 25
+    const numPoints = 30 // More points for smoother curves
     
     pathPoints.push({ x: x, y: startHeight })
     
@@ -581,22 +593,20 @@ export class LevelGenerator {
       const localProgress = i / numPoints
       const pointX = x + (width * localProgress)
       
-      // Create challenging but rideable steepness
-      let steepnessModifier = 1.0
-      if (localProgress > 0.2 && localProgress < 0.8) {
-        // Steeper in the middle section
-        steepnessModifier = 1.3
-      }
+      // Create smooth, gradual uphill without harsh steepness changes
+      const curveProgress = this.easeInOutQuad(localProgress)
       
-      const curveProgress = this.easeInOutQuad(localProgress) * steepnessModifier
-      const pointY = startHeight + (endHeight - startHeight) * Math.min(curveProgress, 1)
+      // Add very gentle undulation to make it interesting but not jagged
+      const gentleWave = Math.sin(localProgress * Math.PI * 1.5) * 8 // Very small wave
+      
+      const pointY = startHeight + (endHeight - startHeight) * curveProgress + gentleWave
       pathPoints.push({ x: pointX, y: pointY })
     }
     
     this.lastChunkEndHeight = endHeight
     this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0xFF1744) // Red for challenging uphills
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // Red for smooth uphills
   }
 
   private createMiniSlopes(chunk: LevelChunk, x: number, width: number, progress: number): void {
@@ -604,7 +614,7 @@ export class LevelGenerator {
     const endHeight = startHeight + (this.targetHeight - startHeight) * progress
     
     const pathPoints = []
-    const numPoints = 20
+    const numPoints = 25 // More points for smoother curves
     
     pathPoints.push({ x: x, y: startHeight })
     
@@ -612,30 +622,33 @@ export class LevelGenerator {
       const localProgress = i / numPoints
       const pointX = x + (width * localProgress)
       
-      // Quick, snappy elevation changes with multiple small jumps
-      const primarySlope = startHeight + (endHeight - startHeight) * localProgress
-      const miniBumps = Math.sin(localProgress * Math.PI * 4) * 30 + 
-                       Math.sin(localProgress * Math.PI * 8) * 15
+      // Create gentle rolling terrain instead of sharp bumps
+      const primarySlope = startHeight + (endHeight - startHeight) * this.easeInOutQuad(localProgress)
       
-      // Add jump-friendly launch ramps on positive slopes
-      const rampBonus = Math.sin(localProgress * Math.PI * 6)
-      const jumpRamp = rampBonus > 0 ? rampBonus * 25 : 0 // Only positive slopes become ramps
+      // Gentle rolling hills with smooth transitions
+      const gentleRolls = Math.sin(localProgress * Math.PI * 2) * 20 + // Primary gentle roll
+                         Math.sin(localProgress * Math.PI * 3) * 8   // Secondary smaller roll
       
-      const pointY = primarySlope + miniBumps - jumpRamp // Subtract to create upward ramps
+      // Create smooth launch ramps instead of sharp jumps
+      const rampCurve = Math.sin(localProgress * Math.PI * 1.5)
+      const launchRamp = rampCurve > 0 ? rampCurve * 15 : 0 // Gentle upward ramps
+      
+      const pointY = primarySlope + gentleRolls - launchRamp
       pathPoints.push({ x: pointX, y: pointY })
     }
     
     this.lastChunkEndHeight = endHeight
     this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0x8BC34A) // Light green for mini slopes
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // Light green for gentle slopes
   }
 
   private createDramaticHills(chunk: LevelChunk, x: number, width: number, progress: number): void {
     const startHeight = this.lastChunkEndHeight
+    const endHeight = startHeight + (this.targetHeight - startHeight) * progress
     
     const pathPoints = []
-    const numPoints = 35
+    const numPoints = 40 // More points for smoother rolling hills
     
     pathPoints.push({ x: x, y: startHeight })
     
@@ -643,29 +656,27 @@ export class LevelGenerator {
       const localProgress = i / numPoints
       const pointX = x + (width * localProgress)
       
-      // Create dramatic landscape with multiple frequency waves and jump-friendly features
-      const globalProgress = progress + (localProgress / this.terrainLength)
-      const wave1 = Math.sin(globalProgress * Math.PI * 1.2) * 120 // Large primary hills
-      const wave2 = Math.sin(globalProgress * Math.PI * 2.8) * 60  // Medium secondary hills
-      const wave3 = Math.sin(globalProgress * Math.PI * 6) * 25    // Small detail bumps
+      // Create smooth rolling landscape that flows between chunks
+      const progressEased = this.easeInOutQuad(localProgress)
+      const baseHeight = startHeight + (endHeight - startHeight) * progressEased
       
-      // Add jump-friendly launch ramps on upward slopes
-      const slopeDirection = Math.cos(globalProgress * Math.PI * 1.2) // Detect upward slopes
-      const launchBoost = slopeDirection > 0.3 ? Math.sin(localProgress * Math.PI * 8) * 20 : 0 // Add small ramps on upward slopes
+      // Layer smooth rolling waves for natural hill patterns
+      const primaryRoll = Math.sin(localProgress * Math.PI * 1.5) * 40  // Main rolling hill
+      const secondaryRoll = Math.sin(localProgress * Math.PI * 2.5) * 20 // Secondary gentler roll
+      const detailRoll = Math.sin(localProgress * Math.PI * 4) * 8       // Fine detail variation
       
-      // Blend with connection to ensure smooth chunk boundaries
-      const connectionBlend = Math.min(localProgress * 2, 1)
-      const dramaticHeight = startHeight + wave1 + wave2 + wave3 - Math.abs(launchBoost)
-      const blendedHeight = startHeight * (1 - connectionBlend) + dramaticHeight * connectionBlend
+      // Create smooth launch opportunities on upward slopes
+      const launchCurve = Math.sin(localProgress * Math.PI * 2)
+      const launchRamp = launchCurve > 0 ? launchCurve * 12 : 0 // Gentle launch ramps
       
-      pathPoints.push({ x: pointX, y: blendedHeight })
+      const pointY = baseHeight + primaryRoll + secondaryRoll + detailRoll - launchRamp
+      pathPoints.push({ x: pointX, y: pointY })
     }
     
-    const endHeight = pathPoints[pathPoints.length - 1].y
     this.lastChunkEndHeight = endHeight
-    this.lastChunkEndAngle = Math.atan2(pathPoints[pathPoints.length - 1].y - pathPoints[pathPoints.length - 2].y, width / numPoints)
+    this.lastChunkEndAngle = Math.atan2(endHeight - startHeight, width)
     
-    this.createSmoothTerrain(chunk, pathPoints, x, width) // 0x9C27B0) // Purple for dramatic terrain
+    this.createSmoothTerrain(chunk, pathPoints, x, width) // Purple for rolling hills
   }
 
   private createMassiveJump(chunk: LevelChunk, x: number, width: number, progress: number): void {

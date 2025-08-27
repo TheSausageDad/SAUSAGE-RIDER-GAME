@@ -26,10 +26,6 @@ export class GameScene extends Phaser.Scene {
   private grassTile!: Phaser.GameObjects.TileSprite
   private backgroundTile!: Phaser.GameObjects.TileSprite
   
-  // Flying owls system
-  private owlSprites: Phaser.GameObjects.Image[] = []
-  private lastOwlSpawnTime: number = 0
-  private owlSpawnInterval: number = 3000 // 3 seconds between owl spawns
 
   constructor() {
     super({ key: "GameScene" })
@@ -52,8 +48,6 @@ export class GameScene extends Phaser.Scene {
     // Load static background image (furthest layer)
     this.load.image('background', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Snow%20Background-KfEe8V5zyq6R8WytKn6B5VKt6f67Ui.png?G00d')
     
-    // Load flying owls
-    this.load.image('owls', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/owls-UY0BTW8XvtP77SMLfPVL0JiPXNM9Hk.png?eCCq')
     
     // Load custom font
     this.load.font('pressStart2P', 'assets/fonts/Press_Start_2P/PressStart2P-Regular.ttf')
@@ -680,8 +674,6 @@ export class GameScene extends Phaser.Scene {
       this.updateParallaxMountains(this.camera.scrollX)
       this.updateGrassGround(this.camera.scrollX)
       
-      // Update flying owls
-      this.updateOwls(_time, deltaTime)
       
       // Manual token collection check (since Matter.js sensor events aren't working)
       this.checkTokenCollisions()
@@ -861,53 +853,6 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private updateOwls(time: number, deltaTime: number): void {
-    // Spawn new owls occasionally
-    if (time - this.lastOwlSpawnTime > this.owlSpawnInterval) {
-      this.spawnOwl()
-      this.lastOwlSpawnTime = time
-      // Randomize next spawn interval (2-5 seconds)
-      this.owlSpawnInterval = 2000 + Math.random() * 3000
-    }
-    
-    // Update existing owls
-    for (let i = this.owlSprites.length - 1; i >= 0; i--) {
-      const owl = this.owlSprites[i]
-      
-      // Move owl to the left (independent of scroll factor)
-      owl.x -= 120 * (deltaTime / 1000) // 120 pixels per second
-      
-      // Add gentle up and down movement
-      const time_ms = time * 0.001
-      owl.y += Math.sin(time_ms + i * 2) * 0.8 // Gentle bobbing
-      
-      // Remove owl when it goes off screen (check against actual camera position)
-      const cameraLeft = this.camera.scrollX - 300
-      if (owl.x < cameraLeft) {
-        console.log(`🦉 Removing owl at x=${owl.x}, camera left=${cameraLeft}`)
-        owl.destroy()
-        this.owlSprites.splice(i, 1)
-      }
-    }
-  }
-  
-  private spawnOwl(): void {
-    // Spawn owl on the right side of screen, behind mountains
-    // Since scroll factor is 0.1, we need to position them in world space, not camera space
-    const spawnX = this.camera.scrollX + this.camera.width + 100 + Math.random() * 200
-    const spawnY = 150 + Math.random() * 200 // Between y=150 and y=350 (above mountains)
-    
-    const owl = this.add.image(spawnX, spawnY, 'owls')
-    owl.setScale(0.3 + Math.random() * 0.2) // Random size between 0.3 and 0.5
-    owl.setDepth(5) // Behind mountains (which are depth 10+)
-    owl.setScrollFactor(0.5) // Medium parallax - not too slow
-    owl.setAlpha(0.9) // Less transparent
-    
-    // Add to owl array for tracking
-    this.owlSprites.push(owl)
-    
-    console.log(`🦉 Spawned owl at (${spawnX}, ${spawnY}) with scroll factor 0.5 - total owls: ${this.owlSprites.length}`)
-  }
 
   // --- Scene Shutdown Logic ---
   shutdown(): void {
@@ -943,12 +888,5 @@ export class GameScene extends Phaser.Scene {
       this.backgroundTile.destroy()
     }
     
-    // Clean up owls
-    this.owlSprites.forEach(owl => {
-      if (owl && owl.active) {
-        owl.destroy()
-      }
-    })
-    this.owlSprites = []
   }
 }

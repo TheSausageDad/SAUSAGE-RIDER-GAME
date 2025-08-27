@@ -306,7 +306,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       }
       
       // Normal ground jumping with cooldown
-      const jumpCooldown = 300
+      const jumpCooldown = 600
       const canJumpStrict = this.isOnGround || this.canJumpFromGround()
       const cooldownPassed = timeSinceLastJump > jumpCooldown
       
@@ -441,12 +441,12 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     }
     
     const motorcycleBottom = this.y + 30 // Account for motorcycle height from center (proportionally larger)
-    let jumpThreshold = 50 // Moderately forgiving base jump threshold for rolling hills
+    let jumpThreshold = 25 // Stricter jump threshold to prevent double jumping
     
     // Make jumping more forgiving with high speed
     if (this.velocity.x > this.baseSpeed * 1.2) {
-      // High speed = more forgiving jump
-      jumpThreshold = 70
+      // High speed = slightly more forgiving jump
+      jumpThreshold = 35
     }
     
     // Get terrain angle to detect slopes
@@ -457,17 +457,17 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     // Make jumping extra forgiving on ANY slope (uphill or downhill)
     const slopeStrength = Math.abs(terrainAngle)
     if (slopeStrength > 0.1) { // Gentle slopes get extra forgiveness
-      jumpThreshold = 80 // Forgiving on slopes
+      jumpThreshold = 45 // Less forgiving on slopes
       
       // More forgiving on steep slopes
       if (slopeStrength > 0.3) {
-        jumpThreshold = 100 // Very forgiving on steep slopes
+        jumpThreshold = 60 // Moderately forgiving on steep slopes
       }
     }
     
     // Special case: if going uphill with good speed, be extra lenient
     if (terrainAngle < -0.2 && this.velocity.x > this.baseSpeed * 1.3) {
-      jumpThreshold = 120 // Extra forgiving for uphill momentum jumps
+      jumpThreshold = 75 // Moderately forgiving for uphill momentum jumps
     }
     
     const canJump = motorcycleBottom >= (terrainHeight - jumpThreshold)
@@ -979,13 +979,13 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     if (isUpwardRamp && hasSpeed && significantRamp) {
       // Convert horizontal momentum to launch velocity (REDUCED)
       const speedBonus = (this.velocity.x - this.baseSpeed) / (this.maxSpeed - this.baseSpeed)
-      const launchPower = speedBonus * this.momentumMultiplier * 150 // Reduced from 400 to 150
+      const launchPower = speedBonus * this.momentumMultiplier * 250 // Increased for higher hill jumps
       
       // Add jump boost if player is holding input (REDUCED)
-      const jumpBoost = this.isInputHeld ? 80 : 0 // Reduced from 200 to 80
+      const jumpBoost = this.isInputHeld ? 120 : 0 // Increased for higher hill jumps
       
       // Cap the total launch power
-      const totalLaunchPower = Math.min(launchPower + jumpBoost, 300) // Maximum 300 launch power
+      const totalLaunchPower = Math.min(launchPower + jumpBoost, 450) // Increased maximum launch power
       
       // Launch the motorcycle
       this.velocity.y = -totalLaunchPower

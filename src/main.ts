@@ -1,4 +1,5 @@
 import { GameScene } from "./scenes/GameScene"
+import { MenuScene } from "./scenes/MenuScene"
 import { initializeFarcadeSDK } from "./utils/RemixUtils"
 import GameSettings from "./config/GameSettings"
 
@@ -15,7 +16,7 @@ const config: Phaser.Types.Core.GameConfig = {
   },
   canvas: canvas,
   backgroundColor: "#111111",
-  scene: [GameScene],
+  scene: [MenuScene, GameScene],
   physics: {
     default: "matter",
     matter: {
