@@ -34,8 +34,21 @@ export function initializeFarcadeSDK(game: Phaser.Game): void {
 
   // Setup play_again handler
   window.FarcadeSDK.on("play_again", () => {
-    // TODO: Restart the game
-    // Your game restart logic is called here
+    // Always restart directly to GameScene (skip menu)
+    const gameScene = game.scene.getScene("GameScene") as any
+    if (gameScene) {
+      // If GameScene exists, restart it directly
+      if (gameScene.scene.isActive("GameScene")) {
+        // Game is active, restart it in place
+        gameScene.restartGame()
+      } else {
+        // Game is not active, start GameScene
+        game.scene.start("GameScene")
+      }
+    } else {
+      // Fallback: start GameScene
+      game.scene.start("GameScene")
+    }
 
     // Attempt to bring focus back to the game canvas
     try {
@@ -44,4 +57,18 @@ export function initializeFarcadeSDK(game: Phaser.Game): void {
       console.warn("Could not programmatically focus game canvas:", e)
     }
   })
+}
+
+// Helper function to trigger haptic feedback
+export function triggerHapticFeedback(): void {
+  if ("FarcadeSDK" in window && window.FarcadeSDK) {
+    window.FarcadeSDK.singlePlayer.actions.hapticFeedback()
+  }
+}
+
+// Helper function to trigger game over with score
+export function triggerGameOver(score: number): void {
+  if ("FarcadeSDK" in window && window.FarcadeSDK) {
+    window.FarcadeSDK.singlePlayer.actions.gameOver({ score })
+  }
 }

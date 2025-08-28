@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GAME_NAME</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@farcade/game-sdk@latest/dist/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
     <style>
@@ -45,6 +48,19 @@
       }
       canvas:focus {
         outline: none;
+      }
+      .press-start-2p-regular {
+        font-family: "Press Start 2P", system-ui;
+        font-weight: 400;
+        font-style: normal;
+      }
+      /* Preload the font */
+      body::before {
+        content: '';
+        font-family: "Press Start 2P";
+        position: absolute;
+        left: -9999px;
+        visibility: hidden;
       }
     </style>
   </head>

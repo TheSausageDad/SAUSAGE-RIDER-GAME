@@ -9,8 +9,7 @@ export class HowToPlayScene extends Phaser.Scene {
     // Load the back button image
     this.load.image('backButton', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/BAck%20button-7SM2eT8LpGI03B66SXHJS5jDgoZby2.png?5oGJ')
     
-    // Load the game's custom font
-    this.load.font('pressStart2P', 'assets/fonts/Press_Start_2P/PressStart2P-Regular.ttf')
+    // Skip custom font for mobile compatibility - use system fallbacks
     
     // Load background image to match game
     this.load.image('background', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Snow%20Background-KfEe8V5zyq6R8WytKn6B5VKt6f67Ui.png?G00d')
@@ -47,7 +46,7 @@ export class HowToPlayScene extends Phaser.Scene {
     const title = this.add.text(GameSettings.canvas.width / 2, 100, 'HOW TO PLAY', {
       fontSize: '28px',
       color: '#FFFFFF',
-      fontFamily: 'pressStart2P',
+      fontFamily: '"Press Start 2P", monospace',
       stroke: '#000000',
       strokeThickness: 3
     }).setOrigin(0.5)
@@ -74,7 +73,7 @@ export class HowToPlayScene extends Phaser.Scene {
     this.add.text(boxX, boxY - boxHeight/2 + 30, 'CONTROLS', {
       fontSize: '24px',
       color: '#FFFFFF',
-      fontFamily: 'pressStart2P',
+      fontFamily: '"Press Start 2P", monospace',
       stroke: '#000000',
       strokeThickness: 3
     }).setOrigin(0.5)
@@ -86,7 +85,7 @@ export class HowToPlayScene extends Phaser.Scene {
     this.add.text(boxX, controlY, 'DESKTOP', {
       fontSize: '16px',
       color: '#FFD700',
-      fontFamily: 'pressStart2P',
+      fontFamily: '"Press Start 2P", monospace',
       stroke: '#000000',
       strokeThickness: 2
     }).setOrigin(0.5)
@@ -94,7 +93,7 @@ export class HowToPlayScene extends Phaser.Scene {
     this.add.text(boxX, controlY + 30, 'Press space to jump', {
       fontSize: '12px',
       color: '#FFFFFF',
-      fontFamily: 'pressStart2P',
+      fontFamily: '"Press Start 2P", monospace',
       stroke: '#000000',
       strokeThickness: 2
     }).setOrigin(0.5)
@@ -102,7 +101,7 @@ export class HowToPlayScene extends Phaser.Scene {
     this.add.text(boxX, controlY + 50, 'Press and hold to flip', {
       fontSize: '12px',
       color: '#FFFFFF',
-      fontFamily: 'pressStart2P',
+      fontFamily: '"Press Start 2P", monospace',
       stroke: '#000000',
       strokeThickness: 2
     }).setOrigin(0.5)
@@ -115,7 +114,7 @@ export class HowToPlayScene extends Phaser.Scene {
     this.add.text(boxX, separatorY + 25, 'MOBILE', {
       fontSize: '16px',
       color: '#FFD700',
-      fontFamily: 'pressStart2P',
+      fontFamily: '"Press Start 2P", monospace',
       stroke: '#000000',
       strokeThickness: 2
     }).setOrigin(0.5)
@@ -123,7 +122,7 @@ export class HowToPlayScene extends Phaser.Scene {
     this.add.text(boxX, separatorY + 55, 'Tap to jump', {
       fontSize: '12px',
       color: '#FFFFFF',
-      fontFamily: 'pressStart2P',
+      fontFamily: '"Press Start 2P", monospace',
       stroke: '#000000',
       strokeThickness: 2
     }).setOrigin(0.5)
@@ -131,7 +130,7 @@ export class HowToPlayScene extends Phaser.Scene {
     this.add.text(boxX, separatorY + 75, 'Tap and hold to flip', {
       fontSize: '12px',
       color: '#FFFFFF',
-      fontFamily: 'pressStart2P',
+      fontFamily: '"Press Start 2P", monospace',
       stroke: '#000000',
       strokeThickness: 2
     }).setOrigin(0.5)

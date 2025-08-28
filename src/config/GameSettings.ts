@@ -14,26 +14,26 @@ export const GameSettings = {
   motorcycle: {
     width: 60,
     height: 30,
-    maxSpeed: 900, // Increased for more excitement while staying controllable
-    acceleration: 1200, // Increased for better responsiveness
+    maxSpeed: 780, // Reduced speed cap by 35% for more controlled gameplay
+    acceleration: 1600, // Good acceleration without being crazy
     airControl: 0.5, // Slightly improved air control
     jumpPower: 600, // Reduced jump power for balanced gameplay
     gravity: 750, // Balanced gravity
     flipSpeed: 360, // degrees per second
     startX: 100, // Adjusted for narrower portrait view
     startY: 220, // Start 500px above ground level (720-500=220)
-    hillClimbPower: 2.8, // Slightly increased for better uphill flow
-    mass: 0.7, // Slightly lighter for better responsiveness
-    boostPower: 2000, // Reduced boost power
-    minSpeed: 400, // Increased for faster-paced gameplay
-    torqueMultiplier: 1.7, // Slightly increased for better uphill performance
+    hillClimbPower: 3.2, // Good uphill retention without being overpowered
+    mass: 0.6, // Balanced mass for good responsiveness
+    boostPower: 2500, // Strong boost power but not excessive
+    minSpeed: 500, // Higher minimum speed for good flow
+    torqueMultiplier: 2.5, // Good uphill performance
   },
 
   physics: {
     gravity: 900, // Reduced overall gravity for floatier feel
-    groundFriction: 0.96, // More friction for better control
-    airFriction: 0.995, // Slight air resistance for balance
-    slopeFriction: 0.92, // More friction on slopes for controlled speeds
+    groundFriction: 0.988, // Slightly more friction for less speed maintaining
+    airFriction: 0.998, // Bit more air resistance
+    slopeFriction: 0.970, // More slope friction for less speed maintaining
   },
 
   level: {

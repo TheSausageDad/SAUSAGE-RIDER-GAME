@@ -2,6 +2,7 @@ import GameSettings from "../config/GameSettings"
 import { ProjectilePhysics, TrajectoryPoint } from "../systems/ProjectilePhysics"
 import { DynamicTerrain } from "../systems/DynamicTerrain"
 import { LevelGenerator } from "../systems/LevelGenerator"
+import { triggerHapticFeedback } from "../utils/RemixUtils"
 
 export class Motorcycle extends Phaser.GameObjects.Container {
   public body!: MatterJS.Body // Physics body for collision detection
@@ -19,7 +20,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   private minSpeed: number = GameSettings.motorcycle.minSpeed // Use GameSettings min speed
   private gravity: number = GameSettings.motorcycle.gravity // Use GameSettings gravity
   private jumpPower: number = GameSettings.motorcycle.jumpPower // Use GameSettings jump power
-  private slopeInfluence: number = 1.2 // Increased slope influence for more dramatic speed changes
+  private slopeInfluence: number = 1.8 // Good slope influence for balanced speed changes
   
   // Game state
   public isOnGround: boolean = true
@@ -37,7 +38,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   
   // Continuous flip controls
   private isInputHeld: boolean = false
-  private flipSpeed: number = 360 // degrees per second when flipping (reduced for slower rotation)
+  private flipSpeed: number = 407 // degrees per second when flipping (13% faster spinning)
   private autoCorrectSpeed: number = 100 // degrees per second for auto-correction (faster spin back to normal)
   private isAutoCorreting: boolean = false
   
@@ -164,7 +165,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       fontSize: '6px',
       color: '#FF0000',
       backgroundColor: '#FFFFFF',
-      fontFamily: 'pressStart2P'
+      fontFamily: '"Press Start 2P", monospace'
     })
     debugText.setOrigin(0.5, 0.5)
     
@@ -194,9 +195,9 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       speed: { min: 60, max: 150 },
       scale: { start: 0.8, end: 0.1 },
       alpha: { start: 1.0, end: 0.0 },
-      lifespan: 1000,
-      frequency: 20,
-      quantity: 5,
+      lifespan: 800,
+      frequency: 40,
+      quantity: 3,
       angle: { min: 150, max: 210 }, // Spray behind player
       gravityY: 100,
       emitZone: {
@@ -223,9 +224,9 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       speed: { min: 80, max: 200 },
       scale: { start: 0.6, end: 0.0 },
       alpha: { start: 1.0, end: 0.0 },
-      lifespan: 600,
-      frequency: 10, // More frequent for intense grinding effect
-      quantity: 8,
+      lifespan: 500,
+      frequency: 25, // Reduced frequency for better performance
+      quantity: 4,
       angle: { min: 45, max: 135 }, // Spray upward and to sides
       gravityY: 200,
       tint: [0xFFD700, 0xFFA500, 0xFF4500], // Gold/orange sparks
@@ -287,10 +288,11 @@ export class Motorcycle extends Phaser.GameObjects.Container {
         this.velocity.y = -this.jumpPower
         this.isOnGround = false
         
-        // Trigger jump sound
+        // Trigger jump sound and haptic feedback
         if (this.onJump) {
           this.onJump()
         }
+        triggerHapticFeedback()
         
         // Properly stop grinding (this will stop sound and particles)
         this.stopGrinding()
@@ -372,8 +374,8 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       }
       
       // Speed-based jump power system - higher minimum for better gameplay
-      const minJumpPower = 350 // Higher minimum jump height for better gameplay at slow speeds
-      const maxJumpPower = 600 // Maximum jump height
+      const minJumpPower = 400 // Higher minimum jump height for better gameplay at slow speeds
+      const maxJumpPower = 650 // Maximum jump height
       
       // Calculate speed ratio (0 to 1)
       const speedRatio = Math.min(1, Math.max(0, (this.velocity.x - this.minSpeed) / (this.maxSpeed - this.minSpeed)))
@@ -404,12 +406,13 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       
       this.isOnGround = false
       
-      // Trigger jump sound
+      // Trigger jump sound and haptic feedback
       if (this.onJump) {
         this.onJump()
       }
+      triggerHapticFeedback()
       
-      console.log(`Snowboarder jumped! Power: ${jumpPower.toFixed(0)}, Speed: ${this.velocity.x.toFixed(0)}`)
+      // Removed excessive jump logging for performance
     }
   }
 
@@ -476,7 +479,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     // Debug logging to help understand jump availability
     if (Math.random() < 0.02) { // 2% chance to log
       const distance = terrainHeight - motorcycleBottom
-      console.log(`🦘 JUMP CHECK: distance=${distance.toFixed(1)}px, threshold=${jumpThreshold}px, canJump=${canJump}, slope=${(terrainAngle * 180/Math.PI).toFixed(1)}°`)
+      // Removed excessive jump logging for performance
     }
     
     return canJump
@@ -691,6 +694,9 @@ export class Motorcycle extends Phaser.GameObjects.Container {
           if (this.onFlipComplete) {
             this.onFlipComplete(1)
           }
+          
+          // Trigger haptic feedback for completed flip/trick
+          triggerHapticFeedback()
         }
       } else if (this.isAutoCorreting) {
         // Auto-correct rotation to upright position
@@ -769,28 +775,33 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       // Convert terrain angle to speed influence (-1 = steep uphill, 1 = steep downhill)
       const slopeInfluence = Math.sin(terrainAngle) * this.slopeInfluence
       
-      // Simplified acceleration system
-      let accelerationMultiplier = 2.0 // Base acceleration rate
+      // Balanced acceleration system for good gameplay
+      let accelerationMultiplier = 3.0 // Good base acceleration rate
+      
+      // Balanced target speed calculation
+      let targetSpeed = this.baseSpeed + (slopeInfluence * (this.maxSpeed - this.baseSpeed) * 0.8)
       
       if (slopeInfluence > 0) {
-        // Downhill - modest speed increase
-        accelerationMultiplier = 2.5 + (slopeInfluence * 0.5) // Gentle downhill acceleration
+        // Downhill - Good speed increases without being crazy
+        accelerationMultiplier = 5.0 + (slopeInfluence * 2.5) // Solid downhill acceleration
       } else if (slopeInfluence < 0) {
-        // Uphill - maintain decent performance
-        accelerationMultiplier = 1.8 // Consistent uphill acceleration
+        // Uphill - Good momentum retention with hill climbing power
+        const uphillPower = GameSettings.motorcycle.hillClimbPower * GameSettings.motorcycle.torqueMultiplier
+        accelerationMultiplier = 2.8 + (uphillPower * 0.2) // Hill climbing power boost
+        
+        // Good uphill momentum retention
+        const speedLossResistance = 0.92 + (uphillPower * 0.008) // Good resistance to speed loss
+        targetSpeed = Math.max(targetSpeed * speedLossResistance, this.minSpeed)
       }
       
-      // Simple target speed calculation
-      let targetSpeed = this.baseSpeed + (slopeInfluence * (this.maxSpeed - this.baseSpeed) * 0.6)
-      
-      // Controlled speed limits - no excessive bonuses
-      const maxSpeedLimit = this.maxSpeed + 50 // Small headroom for variety
+      // Reasonable speed limits for fast but controllable gameplay
+      const maxSpeedLimit = this.maxSpeed + 400 // Good headroom for downhill speeds
       const clampedSpeed = Phaser.Math.Clamp(targetSpeed, this.minSpeed, maxSpeedLimit)
       
       // Apply acceleration with terrain-specific multiplier - more responsive
       const speedDiff = clampedSpeed - this.velocity.x
       const responsiveAcceleration = Math.max(accelerationMultiplier * dt, 0.1) // Minimum 10% change per frame
-      const cappedAcceleration = Math.min(responsiveAcceleration, 0.8) // CRITICAL: Cap acceleration to prevent velocity explosions
+      const cappedAcceleration = Math.min(responsiveAcceleration, 0.5) // Further reduced acceleration cap for smoother speed control
       this.velocity.x += speedDiff * cappedAcceleration
       
       // Keep vertical velocity aligned with terrain when on ground only for slopes
@@ -987,11 +998,11 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       const speedBonus = (this.velocity.x - this.baseSpeed) / (this.maxSpeed - this.baseSpeed)
       const launchPower = speedBonus * this.momentumMultiplier * 250 // Increased for higher hill jumps
       
-      // Add jump boost if player is holding input (REDUCED)
-      const jumpBoost = this.isInputHeld ? 120 : 0 // Increased for higher hill jumps
+      // Add jump boost if player is holding input (ENHANCED)
+      const jumpBoost = this.isInputHeld ? 200 : 0 // Enhanced for better hill jumps
       
       // Cap the total launch power
-      const totalLaunchPower = Math.min(launchPower + jumpBoost, 450) // Increased maximum launch power
+      const totalLaunchPower = Math.min(launchPower + jumpBoost, 500) // Increased maximum launch power for higher jumps
       
       // Launch the motorcycle
       this.velocity.y = -totalLaunchPower
@@ -1234,7 +1245,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
         
         // Log occasionally to show scoring is working
         if (Math.random() < 0.05) { // 5% chance to log
-          console.log(`🟡 GRIND SCORING: +${pointsToAdd} pts (total: ${this.grindScore}, time: ${totalGrindTime.toFixed(1)}s)`)
+          // Reduced grind scoring logs for performance
         }
       }
     }
@@ -1302,6 +1313,27 @@ export class Motorcycle extends Phaser.GameObjects.Container {
     }
     
     console.log(`🔧 RAIL SNAP: Player aligned to rail at (${this.x.toFixed(0)}, ${this.y.toFixed(0)})`)
+  }
+
+  public destroy(): void {
+    // Properly cleanup Matter.js physics body
+    if (this.body && this.scene.matter) {
+      this.scene.matter.world.remove(this.body)
+      this.body = null as any
+    }
+    
+    // Stop and cleanup particle systems
+    if (this.snowParticles) {
+      this.snowParticles.destroy()
+    }
+    if (this.grindParticles) {
+      this.grindParticles.destroy()
+    }
+    
+    // Clear grinding state
+    this.stopGrinding()
+    
+    super.destroy()
   }
 
 }

@@ -31,9 +31,9 @@ export class ScoreManager {
   private createUI(): void {
     // Score display in top-left - fixed to camera
     this.scoreText = this.scene.add.text(20, 20, this.getScoreDisplayText(), {
-      fontSize: '14px',
+      fontSize: '16px',
       color: '#ffffff',
-      fontFamily: 'pressStart2P',
+      fontFamily: '"Press Start 2P", monospace',
       stroke: '#000000',
       strokeThickness: 2
     })
@@ -42,9 +42,9 @@ export class ScoreManager {
 
     // Spin counter in top-right - fixed to camera
     this.flipText = this.scene.add.text(GameSettings.canvas.width - 20, 20, `Spins: ${this.flips}`, {
-      fontSize: '12px',
+      fontSize: '14px',
       color: '#FFD700',
-      fontFamily: 'pressStart2P',
+      fontFamily: '"Press Start 2P", monospace',
       stroke: '#000000',
       strokeThickness: 2
     })
@@ -62,7 +62,7 @@ export class ScoreManager {
       {
         fontSize: '18px',
         color: '#FF0000',
-        fontFamily: 'pressStart2P',
+        fontFamily: '"Press Start 2P", monospace',
         stroke: '#FFFF00',
         strokeThickness: 3
       }
@@ -80,7 +80,7 @@ export class ScoreManager {
       {
         fontSize: '20px',
         color: '#FFD700',
-        fontFamily: 'pressStart2P',
+        fontFamily: '"Press Start 2P", monospace',
         stroke: '#8B4513', // Brown stroke for rail theme
         strokeThickness: 4,
         align: 'center'
@@ -134,7 +134,7 @@ export class ScoreManager {
       {
         fontSize: `${fontSize}px`,
         color: '#FFD700',
-        fontFamily: 'pressStart2P',
+        fontFamily: '"Press Start 2P", monospace',
         stroke: '#FF4500',
         strokeThickness: 4,
         align: 'center'
@@ -249,7 +249,7 @@ export class ScoreManager {
       {
         fontSize: '12px',
         color: `#${color.toString(16).padStart(6, '0')}`,
-        fontFamily: 'pressStart2P',
+        fontFamily: '"Press Start 2P", monospace',
         stroke: '#000000',
         strokeThickness: 3
       }
@@ -383,7 +383,7 @@ export class ScoreManager {
       {
         fontSize: '48px',
         color: '#ff4444',
-        fontFamily: 'pressStart2P',
+        fontFamily: '"Press Start 2P", monospace',
         stroke: '#000000',
         strokeThickness: 4
       }
@@ -400,7 +400,7 @@ export class ScoreManager {
       {
         fontSize: '24px',
         color: '#ffffff',
-        fontFamily: 'pressStart2P',
+        fontFamily: '"Press Start 2P", monospace',
         stroke: '#000000',
         strokeThickness: 3,
         align: 'center'
@@ -418,7 +418,7 @@ export class ScoreManager {
       {
         fontSize: '20px',
         color: '#cccccc',
-        fontFamily: 'pressStart2P',
+        fontFamily: '"Press Start 2P", monospace',
         stroke: '#000000',
         strokeThickness: 2
       }

@@ -97,7 +97,7 @@ export class Rail extends Phaser.GameObjects.Container implements Poolable {
       color: '#00FF00',
       backgroundColor: '#000000',
       padding: { x: 2, y: 1 },
-      fontFamily: 'pressStart2P'
+      fontFamily: '"Press Start 2P", monospace'
     })
     railText.setOrigin(0.5, 0.5)
     
@@ -106,7 +106,7 @@ export class Rail extends Phaser.GameObjects.Container implements Poolable {
       color: '#00FFFF',
       backgroundColor: '#000000',
       padding: { x: 2, y: 1 },
-      fontFamily: 'pressStart2P'
+      fontFamily: '"Press Start 2P", monospace'
     })
     sensorText.setOrigin(0.5, 0.5)
     

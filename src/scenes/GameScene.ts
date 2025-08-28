@@ -6,6 +6,7 @@ import { InputManager } from "../systems/InputManager"
 import { ScoreManager } from "../systems/ScoreManager"
 import { GameObjectPools } from "../systems/ObjectPool"
 import { AudioManager } from "../systems/AudioManager"
+import { triggerGameOver } from "../utils/RemixUtils"
 
 export class GameScene extends Phaser.Scene {
   private motorcycle!: Motorcycle
@@ -36,21 +37,19 @@ export class GameScene extends Phaser.Scene {
     this.load.image('player', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Riding%20image-hkOurseDcYE6YvgDWvYoQ16cgzxM01.png?j9V4')
     this.load.image('player_flipping', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Flipping-yCElSe7lSawCKvFuduGGAf9HmQ0O17.png?Ncwo')
     
-    // Load mountain background images for parallax
-    this.load.image('low-mountainscape', 'assets/images/mountains/low-mountainscape.png')
-    this.load.image('one-peak', 'assets/images/mountains/one-peak.png')
-    this.load.image('two-peaks', 'assets/images/mountains/two-peaks.png')
+    // Load mountain background images for parallax - using online URLs
+    this.load.image('low-mountainscape', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Higher%20mouintan%20scape-PvVImg9WQmSVri4OwNfJc6m4GjvVi2.png?VZGv')
+    this.load.image('one-peak', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Higher%20mouintan%20scape-PvVImg9WQmSVri4OwNfJc6m4GjvVi2.png?VZGv')
+    this.load.image('two-peaks', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Higher%20mouintan%20scape-PvVImg9WQmSVri4OwNfJc6m4GjvVi2.png?VZGv')
     this.load.image('higher-mountainscape', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Higher%20mouintan%20scape-PvVImg9WQmSVri4OwNfJc6m4GjvVi2.png?VZGv')
     
-    // Load grass ground texture
-    this.load.image('grass', 'assets/images/grass.png')
+    // Skip grass texture for mobile compatibility - we'll use programmatic generation
     
     // Load static background image (furthest layer)
     this.load.image('background', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Snow%20Background-KfEe8V5zyq6R8WytKn6B5VKt6f67Ui.png?G00d')
     
     
-    // Load custom font
-    this.load.font('pressStart2P', 'assets/fonts/Press_Start_2P/PressStart2P-Regular.ttf')
+    // Skip custom font for mobile compatibility - use system fallbacks
     
     // Load background music
     this.load.audio('backgroundMusic', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/SAUSAGE%20SLOPES%20LOOP-vMLQsxmXiEz3Ltd41e4EWcYBcP992E.mp3?SWZZ')
@@ -286,8 +285,8 @@ export class GameScene extends Phaser.Scene {
     const numSegments = Math.ceil(totalWidth / segmentWidth)
     
     for (let i = 0; i < numSegments; i++) {
-      // Place mountains in only 12% of segments for very sparse, distant look
-      if (Math.random() < 0.12) {
+      // Place mountains in 25% of segments for good coverage without empty parallax
+      if (Math.random() < 0.25) {
         this.addRandomMountainSegment(container, i * segmentWidth, layerIndex, baseScale, yRange, alpha, blueTint)
       }
     }
@@ -327,10 +326,10 @@ export class GameScene extends Phaser.Scene {
     this.parallaxLayers.forEach(layer => {
       const virtualCameraX = cameraX * layer.scrollFactor
       
-      // Check if we need to extend this layer - extend MUCH earlier
-      const cameraRightEdge = virtualCameraX + (GameSettings.canvas.width * 4) // Look further ahead
+      // Check if we need to extend this layer - optimized extension distance
+      const cameraRightEdge = virtualCameraX + (GameSettings.canvas.width * 2) // Reduced look-ahead
       
-      if (cameraRightEdge > layer.lastExtendX - 2000) { // Extend much earlier
+      if (cameraRightEdge > layer.lastExtendX - 800) { // Much smaller extension threshold
         this.extendRandomMountainLayer(layer)
       }
       
@@ -400,8 +399,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private extendRandomMountainLayer(layer: { container: Phaser.GameObjects.Container, scrollFactor: number, layerIndex: number, lastExtendX: number }): void {
-    const segmentWidth = 200 // Match the smaller segment width
-    const numNewSegments = 20 // Add TONS more segments at once
+    const segmentWidth = 400 // Larger segments for better performance
+    const numNewSegments = 8 // Reduced from 20 to 8 segments
     
     const layerConfigs = [
       { baseScale: 1.5, yRange: [1075, 1125] as [number, number] },   // Far mountains (smaller)
@@ -418,8 +417,8 @@ export class GameScene extends Phaser.Scene {
     for (let i = 0; i < numNewSegments; i++) {
       const x = layer.lastExtendX + (i * segmentWidth)
       
-      // 12% density - very sparse mountains for distant background effect
-      if (Math.random() < 0.12) {
+      // 20% density - better mountain coverage to prevent empty parallax
+      if (Math.random() < 0.20) {
         this.addRandomMountainSegment(
           layer.container, 
           x, 
@@ -434,8 +433,10 @@ export class GameScene extends Phaser.Scene {
     
     layer.lastExtendX += numNewSegments * segmentWidth
     
-    // Always log extensions to track infinite generation
-    console.log(`🏔️ Extended mountain layer ${layer.layerIndex} to ${layer.lastExtendX}px (camera at ${Math.floor(layer.lastExtendX * layer.scrollFactor)})`)
+    // Occasionally log extensions (reduced logging for performance)
+    if (Math.random() < 0.1) {
+      console.log(`🏔️ Extended mountain layer ${layer.layerIndex} to ${layer.lastExtendX}px`)
+    }
   }
 
   private cleanupOldMountainSegments(layer: { container: Phaser.GameObjects.Container, scrollFactor: number, layerIndex: number, lastExtendX: number }, virtualCameraX: number): void {
@@ -457,9 +458,8 @@ export class GameScene extends Phaser.Scene {
       }
     })
     
-    if (removedCount > 0 && Math.random() < 0.1) { // 10% chance to log cleanup
-      console.log(`🧼 Cleaned up ${removedCount} old mountain segments from layer ${layer.layerIndex}`)
-    }
+    // Remove excessive cleanup logging for performance
+    // Cleanup happens silently
   }
 
 
@@ -510,11 +510,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     
-    this.inputManager.onInputStart = () => {
-      if (this.gameState === 'gameOver') {
-        this.restartGame()
-      }
-    }
+    // Removed game over input handling since we skip the restart screen
     
     // Score manager
     this.scoreManager = new ScoreManager(this)
@@ -641,7 +637,14 @@ export class GameScene extends Phaser.Scene {
 
   private gameOver(): void {
     this.gameState = 'gameOver'
-    this.scoreManager.showGameOver()
+    
+    // Skip showing game over screen - directly trigger Farcade SDK game over
+    triggerGameOver(this.scoreManager.getScore())
+    
+    // Auto-restart after a brief delay (optional - can be removed if Farcade handles restart)
+    this.time.delayedCall(1000, () => {
+      this.restartGame()
+    })
   }
 
   private restartGame(): void {
