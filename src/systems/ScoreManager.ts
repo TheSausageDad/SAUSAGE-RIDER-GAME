@@ -52,23 +52,7 @@ export class ScoreManager {
     this.flipText.setDepth(1000)
     this.flipText.setScrollFactor(0) // Fixed to camera
     
-    // Controls hint at bottom - fixed to camera
-    this.controlsText = this.scene.add.text(
-      GameSettings.canvas.width / 2,
-      GameSettings.canvas.height - 60,
-      'HOLD SPACE/TAP: Jump & Spin | Release to auto-correct',
-      {
-        fontSize: '10px',
-        color: '#aaaaaa',
-        fontFamily: 'pressStart2P',
-        stroke: '#000000',
-        strokeThickness: 1,
-        align: 'center'
-      }
-    )
-    this.controlsText.setOrigin(0.5)
-    this.controlsText.setDepth(1000)
-    this.controlsText.setScrollFactor(0) // Fixed to camera
+    // Controls hint removed for cleaner gameplay
     
     // Turbo indicator (hidden by default) - fixed to camera
     this.turboText = this.scene.add.text(
@@ -138,11 +122,8 @@ export class ScoreManager {
     this.score += totalScore
     this.updateUI()
     
-    // Create impressive trick display
+    // Create impressive trick display - just use the trick names as they are
     let trickText = tricks.join(" + ")
-    if (multiplier > 1) {
-      trickText += ` x${multiplier}`
-    }
     
     // Show bigger popup for bigger scores - fixed to camera (reduced size)
     const fontSize = Math.min(16 + (totalScore / 300), 24)
@@ -512,9 +493,6 @@ export class ScoreManager {
     }
     if (this.flipText) {
       this.flipText.destroy()
-    }
-    if (this.controlsText) {
-      this.controlsText.destroy()
     }
     if (this.turboText) {
       this.turboText.destroy()

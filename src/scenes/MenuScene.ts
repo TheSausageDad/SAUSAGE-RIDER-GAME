@@ -10,6 +10,9 @@ export class MenuScene extends Phaser.Scene {
     this.load.image('startPage', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Start%20Page-7J4wj6UCmtxn4YuDyuO7lyCCxJIGc5.png?UdiC')
     this.load.image('startButton', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Start%20Button-6OK3ndhEFEK0KBNEUqpMIXqP7EuCtm.png?8rXX')
     this.load.image('howToPlayButton', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/How%20to%20Play%20Button-e1HBcpL8VrQzihBPsXnBr2SYNZHy8l.png?PB9T')
+    
+    // Load button click sound
+    this.load.audio('buttonClick', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/game%20start-xCrHWKyhHn9jKeZlSOmY5jgRxLvei9.wav?lEH2')
   }
 
   create(): void {
@@ -58,6 +61,7 @@ export class MenuScene extends Phaser.Scene {
     
     startButton.on('pointerup', () => {
       startButton.clearTint()
+      this.sound.play('buttonClick')
       this.scene.start('GameScene')
     })
 
@@ -92,6 +96,7 @@ export class MenuScene extends Phaser.Scene {
     
     howToPlayButton.on('pointerup', () => {
       howToPlayButton.clearTint()
+      this.sound.play('buttonClick')
       this.scene.start('HowToPlayScene')
     })
 

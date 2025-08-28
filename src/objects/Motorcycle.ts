@@ -681,7 +681,6 @@ export class Motorcycle extends Phaser.GameObjects.Container {
         
         while (this.flipRotation >= 270) { // 75% of 360 degrees
           this.completedFlips++
-          this.currentTricks.push("360 Spin")
           this.flipRotation -= 270
           
           // Call individual flip callback with total flip count
@@ -1034,9 +1033,12 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   }
 
   private processLandingTricks(): void {
-    if (this.currentTricks.length > 0 || this.airTime > 0.5) {
+    if (this.completedFlips > 0 || this.airTime > 0.5) {
       // Calculate score based on tricks and air time
       let baseScore = Math.floor(this.airTime * 100) // Base points for air time
+      
+      // Build trick names array
+      let tricks: string[] = []
       
       // Add points for each trick
       this.currentTricks.forEach(trick => {
@@ -1048,20 +1050,21 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       // Calculate multiplier based on air time and trick count
       this.comboMultiplier = Math.floor(1 + (this.airTime / 2) + (this.currentTricks.length * 0.5))
       
-      // Add style points for long air time
+      // Add style points for long air time - show backflip text here instead
       if (this.airTime > 2) {
-        this.currentTricks.push("Big Air")
+        if (this.completedFlips === 1) {
+          tricks.push("BACKFLIP")
+        } else if (this.completedFlips > 1) {
+          tricks.push(`BACKFLIPx${this.completedFlips}`)
+        } else {
+          // No flips but long air - don't show any text
+        }
         baseScore += 300
       }
       
-      if (this.airTime > 3) {
-        this.currentTricks.push("Massive Air")  
-        baseScore += 500
-      }
-      
       // Notify about completed combo
-      if (this.onTrickComplete && (this.currentTricks.length > 0 || this.airTime > 0.5)) {
-        this.onTrickComplete(this.currentTricks, this.comboMultiplier, this.airTime)
+      if (this.onTrickComplete && (tricks.length > 0 || this.airTime > 0.5)) {
+        this.onTrickComplete(tricks, this.comboMultiplier, this.airTime)
       }
     }
     

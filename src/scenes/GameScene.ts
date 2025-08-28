@@ -121,13 +121,19 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.motorcycle.onTrickComplete = (tricks: string[], multiplier: number, airTime: number) => {
-      // Calculate total score for this trick combo
+      // The Motorcycle class already calculated the score, just pass it through
       let baseScore = Math.floor(airTime * 100)
       tricks.forEach(trick => {
-        if (trick === "360 Spin") baseScore += 500
-        if (trick === "Big Air") baseScore += 300
-        if (trick === "Massive Air") baseScore += 500
+        if (trick === "BACKFLIP" || trick.startsWith("BACKFLIPx")) {
+          const flipCount = trick === "BACKFLIP" ? 1 : parseInt(trick.substring(9))
+          baseScore += 500 * flipCount
+        }
       })
+      
+      // Add air time bonus (no text shown for this)
+      if (airTime > 2) {
+        baseScore += 300
+      }
       
       const totalScore = baseScore * multiplier
       this.scoreManager.addTrickScore(totalScore, tricks, multiplier)

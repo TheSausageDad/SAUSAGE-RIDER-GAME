@@ -14,6 +14,9 @@ export class HowToPlayScene extends Phaser.Scene {
     
     // Load background image to match game
     this.load.image('background', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Snow%20Background-KfEe8V5zyq6R8WytKn6B5VKt6f67Ui.png?G00d')
+    
+    // Load button click sound
+    this.load.audio('buttonClick', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/game%20start-xCrHWKyhHn9jKeZlSOmY5jgRxLvei9.wav?lEH2')
   }
 
   create(): void {
@@ -155,6 +158,7 @@ export class HowToPlayScene extends Phaser.Scene {
     
     backButton.on('pointerup', () => {
       backButton.clearTint()
+      this.sound.play('buttonClick')
       this.scene.start('MenuScene')
     })
 
