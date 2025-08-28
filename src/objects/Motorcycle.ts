@@ -38,7 +38,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   // Continuous flip controls
   private isInputHeld: boolean = false
   private flipSpeed: number = 360 // degrees per second when flipping (reduced for slower rotation)
-  private autoCorrectSpeed: number = 30 // degrees per second for auto-correction (much weaker to allow crashes)
+  private autoCorrectSpeed: number = 100 // degrees per second for auto-correction (faster spin back to normal)
   private isAutoCorreting: boolean = false
   
   // Momentum-based launching
@@ -50,6 +50,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   public onLanding: ((hadTricks: boolean) => void) | null = null
   public onTrickComplete: ((tricks: string[], multiplier: number, airTime: number) => void) | null = null
   public onJump: (() => void) | null = null
+  public onIndividualFlip: ((flipCount: number) => void) | null = null
 
   // Snow trail particle system
   private snowParticles: Phaser.GameObjects.Particles.ParticleEmitter | null = null
@@ -678,10 +679,15 @@ export class Motorcycle extends Phaser.GameObjects.Container {
         // Track completed flips for scoring
         this.flipRotation += this.flipSpeed * dt
         
-        while (this.flipRotation >= 360) {
+        while (this.flipRotation >= 270) { // 75% of 360 degrees
           this.completedFlips++
           this.currentTricks.push("360 Spin")
-          this.flipRotation -= 360
+          this.flipRotation -= 270
+          
+          // Call individual flip callback with total flip count
+          if (this.onIndividualFlip) {
+            this.onIndividualFlip(this.completedFlips)
+          }
           
           if (this.onFlipComplete) {
             this.onFlipComplete(1)
@@ -859,6 +865,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
         this.isFlipping = false;
         this.isAutoCorreting = false;
         this.flipRotation = 0;
+        this.completedFlips = 0; // Reset flip counter for next air session
         
         // Change back to normal image when landing and restore position/scale
         (this.riderSprite as any).setTexture('player');

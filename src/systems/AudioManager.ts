@@ -18,6 +18,7 @@ export class AudioManager {
     this.scene.load.audio('land2', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/land%20sfx-cyUCT9eCet8XsFMRyCqEmprh743kfE.wav?T47f')
     this.scene.load.audio('railGrind', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/rail%20grind-HPHYxOpikCzCiT4UDZKf2MDIwezXWM.wav?GyY7')
     this.scene.load.audio('tokenCollect', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/token%20sfx-qDq1gof8EncxfoLBo7PO5ITHezOAxo.wav?HSbR')
+    this.scene.load.audio('combo', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/combo%20sfx-0lt1YhGUH3Pf85W4jIqg3eQfUxOm2k.wav?Kyl8')
   }
 
   createSounds(): void {
@@ -29,6 +30,7 @@ export class AudioManager {
     this.sounds.set('land2', this.scene.sound.add('land2', { volume: 0.15 }))
     this.sounds.set('railGrind', this.scene.sound.add('railGrind', { volume: 0.15, loop: true }))
     this.sounds.set('tokenCollect', this.scene.sound.add('tokenCollect', { volume: 0.15 }))
+    this.sounds.set('combo', this.scene.sound.add('combo', { volume: 0.2 }))
   }
 
   playSound(soundKey: string): void {
@@ -77,6 +79,32 @@ export class AudioManager {
 
   playTokenCollectSound(): void {
     this.playSound('tokenCollect')
+  }
+
+  playComboSound(): void {
+    this.playSound('combo')
+  }
+
+  playFlipSound(flipCount: number): void {
+    // Play combo sound with increasing pitch for each flip
+    // Cap the pitch increase at 6 flips
+    const maxFlips = 6
+    const cappedFlipCount = Math.min(flipCount, maxFlips)
+    
+    // Calculate pitch rate (1.0 = normal, 1.2 = higher, etc.)
+    // Start at 1.0 and increase by 0.08 per flip, capping at 6 flips
+    const pitchRate = 1.0 + (cappedFlipCount - 1) * 0.08
+    
+    const sound = this.sounds.get('combo')
+    if (sound) {
+      // Stop any currently playing flip sound to avoid overlap
+      if (sound.isPlaying) {
+        sound.stop()
+      }
+      
+      // Play with increasing pitch
+      sound.play({ rate: pitchRate })
+    }
   }
 
   destroy(): void {

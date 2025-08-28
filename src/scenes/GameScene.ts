@@ -131,6 +131,8 @@ export class GameScene extends Phaser.Scene {
       
       const totalScore = baseScore * multiplier
       this.scoreManager.addTrickScore(totalScore, tricks, multiplier)
+      
+      // No combo sound here - only for individual flips
     }
 
     this.motorcycle.onGrindStart = () => {
@@ -149,6 +151,10 @@ export class GameScene extends Phaser.Scene {
 
     this.motorcycle.onGrindSoundStop = () => {
       this.audioManager.stopRailGrindSound()
+    }
+
+    this.motorcycle.onIndividualFlip = (flipCount: number) => {
+      this.audioManager.playFlipSound(flipCount)
     }
     
   }
