@@ -92,8 +92,7 @@ export class MenuScene extends Phaser.Scene {
     
     howToPlayButton.on('pointerup', () => {
       howToPlayButton.clearTint()
-      // TODO: Add how to play functionality here
-      console.log('How to Play clicked')
+      this.scene.start('HowToPlayScene')
     })
 
     // Also allow keyboard input (spacebar or enter) to start

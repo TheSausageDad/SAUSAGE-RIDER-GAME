@@ -11,13 +11,15 @@ An endless runner snowboarding game inspired by Alto's Odyssey, featuring realis
 - **Visual Enhancements**: Color-coded terrain types and atmospheric mountain backgrounds
 
 ## Latest Session Updates (Current Build)
+- **Enhanced Jump Mechanics**: Significantly improved hill jump power (250 launch multiplier, 67% increase) and jump boost (120, 50% increase)
+- **Anti-Double Jump System**: Increased jump cooldown to 600ms and tightened all jump thresholds by ~50% for precise control
+- **Audio System Enhancements**: Individual flip combo sounds with progressive pitch scaling (1.0 → 1.08 → 1.16 per flip)
+- **Flip Detection Refinement**: Changed flip completion from 360° to 270° (75% rotation) for more responsive registration
+- **Auto-Correction Improvement**: Increased recovery speed from 30 to 100 degrees/second for faster upright recovery
+- **Menu System Polish**: Optimized button sizes (225px width) and positioning, removed pulse animations for cleaner UI
 - **Rail Grinding System Overhaul**: Complete rail grinding implementation with smooth continuous scoring
-- **Improved Jump Mechanics**: Forgiving jump system with 300ms cooldown to prevent double jumping  
 - **Player Size Enhancement**: 75% larger player sprite (0.18 → 0.32 scale) with proportional collision body
 - **Velocity Control System**: Fixed extreme velocity bugs with proper acceleration capping and limits
-- **Rail Frequency Rebalancing**: Reduced rail spawning from 22% to 8% chance (5% flat + 3% downhill rails)
-- **Debug Visual Management**: Clean gameplay with debug hitboxes disabled, collision outline available on demand
-- **Persistent Grind Scoring**: Single rising score display during rail grinding instead of popup spam
 
 ## Core Systems Architecture
 
@@ -51,15 +53,19 @@ const slopeInfluence = Math.sin(terrainAngle) * this.slopeInfluence // 1.2 influ
 **Enhanced Jump System**:
 - **Forgiving Ground Detection**: Dual detection system for rolling hills
   - `isOnGround`: Basic physics flag
-  - `canJumpFromGround()`: Forgiving detection (50-120px threshold based on slope)
+  - `canJumpFromGround()`: Tightened detection thresholds (25-75px based on slope, reduced ~50%)
   - `isTrulyAirborne()`: Strict airborne check (30px clearance)
-- **Anti-Double Jump**: 300ms cooldown prevents air jumping while allowing rapid ground jumps
-- **Jump Power**: 1000 (increased from 350) with speed-based scaling
-- **Momentum Launches**: Speed converts to jump power on upward ramps
+- **Enhanced Anti-Double Jump**: 600ms cooldown prevents air jumping and near-double jumps
+- **Improved Hill Jump Power**: Launch power multiplier increased to 250 (67% increase from 150)
+- **Enhanced Jump Boost**: Input-held jump boost increased to 120 (50% increase from 80)
+- **Maximum Launch Power**: Increased to 450 (50% increase from 300)
+- **Momentum Launches**: Speed converts to jump power on upward ramps with enhanced multipliers
 
 **Spin System**:
 - Continuous 360°/second rotation while input held
-- Auto-correction at 360°/second when upside down
+- **Enhanced Auto-correction**: 100°/second recovery speed (increased from 30°/second)
+- **Improved Flip Detection**: Flip completion at 270° rotation (75% of full spin) for more responsive registration
+- **Progressive Audio Feedback**: Individual flip sounds with pitch scaling (1.0 → 1.08 → 1.16 per successive flip)
 - Only functions when truly airborne (15px clearance)
 
 ### 2. Terrain Generation (`src/systems/LevelGenerator.ts`)
@@ -148,11 +154,17 @@ else createExtendedFlat()                        // 2% - 1 chunk flat sections (
 **Comprehensive Trick and Combo System**
 
 **Scoring Breakdown**:
-- **360° Spins**: 500 points each
+- **360° Spins**: 500 points each (now triggered at 270° for responsiveness)
 - **Air Time**: 100 points per second
 - **Big Air**: 300 bonus (2+ seconds)
 - **Massive Air**: 500 bonus (3+ seconds)
 - **Combo Multiplier**: `1 + (airTime/2) + (trickCount * 0.5)`
+
+**Enhanced Audio Feedback**:
+- **Individual Flip Sounds**: Each completed flip triggers combo sound with progressive pitch
+- **Pitch Scaling**: Starts at 1.0, increases by 0.08 per flip (1.0 → 1.08 → 1.16 → etc.)
+- **Pitch Cap**: Maximum at 6th flip, stays constant thereafter
+- **Sound Reset**: Flip counter and pitch reset on each landing for new air sessions
 
 **UI Elements** (Camera-relative with `setScrollFactor(0)`):
 - Score and token display (top-left)
@@ -277,7 +289,7 @@ level: {
 ```typescript
 // Check multiple detection methods for different scenarios
 if (this.canJumpFromGround()) {
-  // More forgiving jump (30-120px threshold based on slope/speed)
+  // Tightened jump detection (25-75px threshold based on slope/speed, ~50% reduction)
 } else if (this.isTrulyAirborne()) {
   // Allow spinning only when clear of terrain (15px)
 } else if (this.isOnGround) {
@@ -287,10 +299,12 @@ if (this.canJumpFromGround()) {
 
 ### Momentum Launch System
 ```typescript
-// Speed-to-launch conversion on upward ramps
+// Enhanced speed-to-launch conversion on upward ramps
 if (isUpwardRamp && hasSpeed && significantRamp) {
   const speedBonus = (this.velocity.x - this.baseSpeed) / (this.maxSpeed - this.baseSpeed)
-  const launchPower = speedBonus * this.momentumMultiplier * 400
+  const launchPower = speedBonus * this.momentumMultiplier * 250 // Increased multiplier
+  // Maximum total launch power: 450 (50% increase from 300)
+  // Jump boost when holding input: 120 (50% increase from 80)
 }
 ```
 
@@ -308,10 +322,12 @@ if (isUpwardRamp && hasSpeed && significantRamp) {
 ### Jump System Enhancement  
 **Problem**: Players couldn't jump reliably on rolling hills, double jumping was possible
 **Solution**:
-- Enhanced ground detection with forgiving thresholds (50-120px based on slope)
-- Added 300ms jump cooldown to prevent double jumping
-- Dual detection system (strict + forgiving) for better rolling hill support
-- Result: Responsive jumping that works on all terrain types without exploits
+- Enhanced ground detection with tightened thresholds (25-75px based on slope, reduced ~50%)
+- Increased jump cooldown to 600ms to prevent double jumping and near-double jumps
+- Significantly improved hill jump mechanics (250 launch multiplier, 67% increase)
+- Enhanced jump boost when holding input (120, 50% increase from 80)
+- Increased maximum total launch power to 450 (50% increase from 300)
+- Result: More responsive and powerful jumping with precise anti-exploit controls
 
 ### Player Visibility & Collision Improvement
 **Problem**: Player sprite too small and poorly aligned with collision detection
@@ -339,6 +355,32 @@ if (isUpwardRamp && hasSpeed && significantRamp) {
 - Removed testing mode forced rail spawning
 - Organized debug systems for easy enable/disable
 - Result: Professional visual presentation with debugging capabilities available
+
+### Menu System & UI Polish
+**Problem**: Menu buttons had inconsistent sizing and distracting animations
+**Solution**:
+- Standardized button widths to 225px for both Start and How to Play buttons
+- Removed pulse animations (1.05x scale) for cleaner, more professional appearance
+- Repositioned How to Play button down 20px (height-60) for better spacing
+- Result: Clean, consistent menu interface with improved visual hierarchy
+
+### Enhanced Audio Feedback System
+**Problem**: Limited audio feedback for tricks, no individual flip recognition
+**Solution**:
+- Implemented individual flip sound system with progressive pitch scaling
+- Each completed flip (270°) triggers combo sound with increasing pitch (1.0 → 1.08 → 1.16)
+- Pitch caps at 6th flip and maintains constant level thereafter
+- Sound counter resets on landing for each new air session
+- Removed combo sound from non-flip tricks (big air, etc.) for clarity
+- Result: Rich audio feedback that rewards consecutive flips with escalating excitement
+
+### Flip Detection & Auto-Correction Improvements
+**Problem**: Flip detection required full 360° rotation, slow auto-correction felt sluggish
+**Solution**:
+- Reduced flip completion threshold from 360° to 270° (75% rotation) for responsive feel
+- Increased auto-correction speed from 30°/second to 100°/second for rapid recovery
+- Flip counter resets on landing to restart sound progression
+- Result: More forgiving and responsive spin mechanics with faster recovery
 
 ## Performance Improvements & Optimizations
 
