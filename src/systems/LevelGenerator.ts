@@ -336,7 +336,7 @@ export class LevelGenerator {
         this.createJumpRamp(chunk, x, width, progress)
         break
       default:
-        this.createFlatGround(chunk, x, width)
+        this.createExtendedFlat(chunk, x, width)
         break
     }
     
@@ -454,8 +454,25 @@ export class LevelGenerator {
   }
 
   private createExtendedFlat(chunk: LevelChunk, x: number, width: number): void {
-    // Simple flat ground for breathing room
-    this.createFlatGround(chunk, x, width)
+    // Convert flat sections to mini slopes for more visual interest
+    const startHeight = this.lastChunkEndHeight
+    const pathPoints = []
+    const numPoints = 20
+    
+    for (let i = 0; i <= numPoints; i++) {
+      const progress = i / numPoints
+      const pointX = x + (width * progress)
+      
+      // Add very subtle rolling variations instead of pure flat
+      const subtleVariation = Math.sin(progress * Math.PI * 2) * 15
+      const pointY = startHeight + subtleVariation
+      pathPoints.push({ x: pointX, y: pointY })
+    }
+    
+    this.lastChunkEndHeight = pathPoints[pathPoints.length - 1].y
+    this.lastChunkEndAngle = 0
+    
+    this.createSmoothTerrain(chunk, pathPoints, x, width, 'mini_slopes')
   }
 
   private createRailFlat(chunk: LevelChunk, x: number, width: number, progress: number): void {
@@ -836,51 +853,9 @@ export class LevelGenerator {
     // Enhanced visual terrain with color-coded appearance
     const terrain = this.scene.add.graphics()
     
-    // Color-coded terrain based on type
-    let topColor = 0xFFFAFA // Default snow white
-    let bottomColor = 0xF0F8FF // Default alice blue
-    
-    switch (terrainType) {
-      case 'epic_downhill':
-        topColor = 0xFFB366 // Light orange
-        bottomColor = 0xFF8533 // Darker orange
-        break
-      case 'steep_uphill':
-        topColor = 0xFF9999 // Light red
-        bottomColor = 0xFF6666 // Darker red
-        break
-      case 'rail_flat':
-        topColor = 0xCC99FF // Light purple
-        bottomColor = 0x9966FF // Darker purple
-        break
-      case 'rail_downhill':
-        topColor = 0xFFCC99 // Light orange
-        bottomColor = 0xFF9933 // Darker orange
-        break
-      case 'mini_slopes':
-        topColor = 0xCCFFCC // Light green
-        bottomColor = 0x99FF99 // Darker green
-        break
-      case 'dramatic_hills':
-        topColor = 0xDDCCFF // Light purple
-        bottomColor = 0xBB99FF // Darker purple
-        break
-      case 'massive_jump':
-        topColor = 0xCCFFFF // Light cyan
-        bottomColor = 0x99FFFF // Darker cyan
-        break
-      case 'jump_chain':
-        topColor = 0xFFCCFF // Light pink
-        bottomColor = 0xFF99FF // Darker pink
-        break
-      case 'speed_valley':
-        topColor = 0xFFFFCC // Light yellow
-        bottomColor = 0xFFFF99 // Darker yellow
-        break
-      default:
-        // Keep default snow white colors
-        break
-    }
+    // All terrain now uses classic snow white appearance
+    const topColor = 0xFFFAFA // Snow white
+    const bottomColor = 0xF0F8FF // Alice blue
     
     // Main terrain with color-coded gradient fill
     terrain.fillGradientStyle(topColor, topColor, bottomColor, bottomColor, 1, 1, 1, 1)
