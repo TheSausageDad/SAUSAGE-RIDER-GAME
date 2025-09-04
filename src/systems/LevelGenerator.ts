@@ -265,12 +265,6 @@ export class LevelGenerator {
       this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for gentle changes
       this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 150 // ±75px gentle changes
       // Terrain logging removed for performance
-    } else if (terrainType < 0.90) {
-      // Big jump hills (2-3 chunks) - 10% chance for exciting jumps
-      this.currentTerrainType = 'massive_jump'
-      this.terrainLength = 2 + Math.floor(Math.random() * 2) // 2-3 chunks for jump setup
-      this.targetHeight = this.lastChunkEndHeight + (Math.random() - 0.5) * 300 // ±150px for jump variety
-      // Terrain logging removed for performance
     } else if (terrainType < 0.95 && this.railCooldown === 0) {
       // Rail sections (2-3 chunks) - 5% chance when available
       this.currentTerrainType = 'rail_flat'
@@ -279,7 +273,7 @@ export class LevelGenerator {
       this.railCooldown = 0 // Reset cooldown
       // Terrain logging removed for performance
     } else {
-      // Flat breathing room (1-2 chunks) - 5-10% chance
+      // Flat breathing room - INCREASED TO 30% FOR ROCK TESTING
       this.currentTerrainType = 'extended_flat'
       this.terrainLength = 1 + Math.floor(Math.random() * 2) // 1-2 chunks for rest
       this.targetHeight = this.lastChunkEndHeight // Keep current height
@@ -478,7 +472,9 @@ export class LevelGenerator {
     
     this.createSmoothTerrain(chunk, pathPoints, x, width, 'mini_slopes')
     
-    // Add rock obstacles to flat terrain (15% chance)
+    console.log(`🌱 Created FLAT terrain at x=${x.toFixed(0)} - attempting rock spawn`)
+    
+    // Add rock obstacles to flat terrain (95% chance)
     this.addRocksToFlat(chunk)
   }
 
@@ -1300,10 +1296,8 @@ export class LevelGenerator {
       return // Still in cooldown
     }
 
-    // 80% chance to spawn a rock on flat terrain (for testing)
-    if (Math.random() > 0.8) {
-      return // No rock this time
-    }
+    // ROCKS TEMPORARILY DISABLED - return early
+    return // No rocks for now
 
     if (!chunk.terrainPath || chunk.terrainPath.length < 2) {
       return // No terrain path to place rock on
@@ -1322,10 +1316,10 @@ export class LevelGenerator {
     const rock = this.objectPools.rockPool.get(rockX, rockY)
     chunk.rocks.push(rock)
 
-    // Set cooldown to prevent next rock for ~5 seconds (7 chunks at 300px each)
-    this.rockCooldown = 7
+    // Set cooldown to prevent next rock for ~2 seconds (3 chunks for testing)
+    this.rockCooldown = 3
 
-    console.log(`🪨 Rock spawned at (${rockX.toFixed(0)}, ${rockY.toFixed(0)}) on flat terrain - cooldown set to 7 chunks`)
+    console.log(`🪨 Rock spawned at (${rockX.toFixed(0)}, ${rockY.toFixed(0)}) on flat terrain - cooldown set to 3 chunks`)
   }
 
   private guaranteeRailSpawn(chunk: LevelChunk): void {

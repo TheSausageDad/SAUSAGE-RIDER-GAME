@@ -7,6 +7,7 @@ import { ScoreManager } from "../systems/ScoreManager"
 import { GameObjectPools } from "../systems/ObjectPool"
 import { AudioManager } from "../systems/AudioManager"
 import { RockWarningSystem } from "../systems/RockWarningSystem"
+import { FlipTimer } from "../systems/FlipTimer"
 import { triggerGameOver } from "../utils/RemixUtils"
 
 export class GameScene extends Phaser.Scene {
@@ -18,6 +19,7 @@ export class GameScene extends Phaser.Scene {
   private objectPools!: GameObjectPools
   private audioManager!: AudioManager
   private rockWarningSystem!: RockWarningSystem
+  private flipTimer!: FlipTimer
   
   private camera!: Phaser.Cameras.Scene2D.Camera
   private gameState: 'playing' | 'gameOver' = 'playing'
@@ -41,6 +43,12 @@ export class GameScene extends Phaser.Scene {
     
     // Load rock image
     this.load.image('rock', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Rock-apKSB0qq36up3ubDji8h7OZalThazB.png?dNY4')
+    
+    // Load timer bar image
+    this.load.image('timer_bar', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Wiener%20for%20WIENER%20METER-3XYcnHDJ03UqQMJFA2IAH39JVZPJic.png?oD7l')
+    
+    // Load timer rim image
+    this.load.image('timer_rim', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Rim%20of%20WIENER%20METER-Q5w3aCFPjDy7yv5oACpR4WR9MTFVfY.png?VOez')
     
     // Load mountain background images for parallax - using online URLs
     this.load.image('low-mountainscape', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Higher%20mouintan%20scape-PvVImg9WQmSVri4OwNfJc6m4GjvVi2.png?VZGv')
@@ -165,6 +173,11 @@ export class GameScene extends Phaser.Scene {
 
     this.motorcycle.onIndividualFlip = (flipCount: number) => {
       this.audioManager.playFlipSound(flipCount)
+    }
+
+    this.motorcycle.onFlipStart = () => {
+      console.log("🔄 Player started flipping - resetting timer!")
+      this.flipTimer.resetTimer()
     }
     
   }
@@ -522,6 +535,13 @@ export class GameScene extends Phaser.Scene {
 
     // Rock warning system
     this.rockWarningSystem = new RockWarningSystem(this)
+
+    // Flip timer system
+    this.flipTimer = new FlipTimer(this)
+    this.flipTimer.onTimerExpired = () => {
+      console.log("💀 FLIP TIMER DEATH! Player didn't flip in time!")
+      this.gameOver()
+    }
     
     // Setup collision detection for tokens
     this.setupCollisions()
@@ -546,6 +566,10 @@ export class GameScene extends Phaser.Scene {
     }
     
     for (const pair of event.pairs) {
+      // Handle rock collisions first (most important)
+      this.handleRockCollision(pair)
+      
+      // Handle rail collisions (existing logic)
       const bodyA = pair.bodyA
       const bodyB = pair.bodyB
       
@@ -639,6 +663,66 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private handleRockCollision(pair: any): void {
+    let playerBody = null
+    let rockBody = null
+    
+    // Identify player-rock collision
+    if (pair.bodyA.label === 'motorcycle' && pair.bodyB.label === 'rock') {
+      playerBody = pair.bodyA
+      rockBody = pair.bodyB
+    } else if (pair.bodyB.label === 'motorcycle' && pair.bodyA.label === 'rock') {
+      playerBody = pair.bodyB
+      rockBody = pair.bodyA
+    }
+    
+    if (!playerBody || !rockBody) {
+      return // Not a player-rock collision
+    }
+    
+    console.log("🪨 ROCK COLLISION DETECTED via Matter.js physics!")
+    console.log(`  Player: (${playerBody.position.x.toFixed(1)}, ${playerBody.position.y.toFixed(1)})`)
+    console.log(`  Rock: (${rockBody.position.x.toFixed(1)}, ${rockBody.position.y.toFixed(1)})`)
+    console.log(`  Player velocity: (${playerBody.velocity.x.toFixed(1)}, ${playerBody.velocity.y.toFixed(1)})`)
+    
+    // Get collision details for angle analysis
+    const dx = playerBody.position.x - rockBody.position.x
+    const dy = playerBody.position.y - rockBody.position.y
+    const isPlayerAboveRock = dy < -5 // Player center is above rock center by 5px
+    const isPlayerFalling = playerBody.velocity.y > 50 // Player is falling downward
+    
+    console.log(`  Position delta: (${dx.toFixed(1)}, ${dy.toFixed(1)})`)
+    console.log(`  Player above rock: ${isPlayerAboveRock}`)
+    console.log(`  Player falling: ${isPlayerFalling} (velY: ${playerBody.velocity.y.toFixed(1)})`)
+    
+    // Determine if this should be a bounce or death
+    if (isPlayerAboveRock && isPlayerFalling) {
+      console.log("🎯 ROCK BOUNCE CONDITIONS MET!")
+      this.handleRockBounce(playerBody, rockBody)
+    } else {
+      console.log("💀 ROCK DEATH - side/front collision!")
+      this.handleRockDeath()
+    }
+  }
+
+  private handleRockBounce(playerBody: any, rockBody: any): void {
+    console.log("🚀 ROCK BOUNCE! (placeholder - will implement full bounce physics)")
+    // TODO: Implement bounce physics
+    // For now, just log the event
+  }
+
+  private handleRockDeath(): void {
+    console.log("💀 ROCK COLLISION! Game Over!")
+    
+    // Trigger crash callback on motorcycle which will call game over
+    if (this.motorcycle.onCrash) {
+      this.motorcycle.onCrash()
+    } else {
+      // Fallback if callback not set
+      this.gameOver()
+    }
+  }
+
   private startGame(): void {
     this.gameState = 'playing'
   }
@@ -672,6 +756,9 @@ export class GameScene extends Phaser.Scene {
     
     // Reset camera
     this.camera.setScroll(0, 0)
+
+    // Reset flip timer
+    this.flipTimer.resetTimer()
     
     // Restart game
     this.gameState = 'playing'
@@ -704,9 +791,11 @@ export class GameScene extends Phaser.Scene {
       // Manual rail collision check
       this.checkRailCollisions()
 
-      // Check rock collisions and update warning system
-      this.checkRockCollisions()
+      // Update rock warning system (collision now handled by Matter.js events)
       this.updateRockWarnings()
+
+      // Update flip timer
+      this.flipTimer.update()
       
       this.scoreManager.update()
     }
@@ -880,47 +969,14 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // OLD DISTANCE-BASED COLLISION METHOD - DISABLED
+  // Now using proper Matter.js collision events in handleRockCollision()
+  /*
   private checkRockCollisions(): void {
-    const motorcycleX = this.motorcycle.x
-    const motorcycleY = this.motorcycle.y
-    const collisionRadius = 30 // Smaller than token collection for precise collision
-    const collisionRadiusSquared = collisionRadius * collisionRadius
-    
-    // Only check rocks that are roughly on screen
-    const cameraLeft = this.camera.scrollX - 100
-    const cameraRight = this.camera.scrollX + this.camera.width + 100
-    
-    // Get all rocks from level generator
-    const rocks = this.levelGenerator.getRocks()
-    
-    for (let i = 0; i < rocks.length; i++) {
-      const rock = rocks[i]
-      
-      // Skip if not active or not visible
-      if (!rock.isActive || rock.x < cameraLeft || rock.x > cameraRight) {
-        continue
-      }
-      
-      // Quick distance check using squared distance (faster than sqrt)
-      const dx = rock.x - motorcycleX
-      const dy = rock.y - motorcycleY
-      const distanceSquared = dx * dx + dy * dy
-      
-      if (distanceSquared <= collisionRadiusSquared) {
-        console.log("💀 ROCK COLLISION! Game Over!")
-        
-        // Trigger crash callback on motorcycle which will call game over
-        if (this.motorcycle.onCrash) {
-          this.motorcycle.onCrash()
-        } else {
-          // Fallback if callback not set
-          this.gameOver()
-        }
-        
-        return // Exit immediately after collision
-      }
-    }
+    // This method is now replaced by handleRockCollision() which uses proper physics events
+    // Keeping commented for reference
   }
+  */
 
   private updateRockWarnings(): void {
     // Update rock warning system with current player state and upcoming rocks
@@ -950,6 +1006,9 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.rockWarningSystem) {
       this.rockWarningSystem.destroy()
+    }
+    if (this.flipTimer) {
+      this.flipTimer.destroy()
     }
     
     // Clean up parallax layers and grass

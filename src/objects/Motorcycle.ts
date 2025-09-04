@@ -52,6 +52,7 @@ export class Motorcycle extends Phaser.GameObjects.Container {
   public onTrickComplete: ((tricks: string[], multiplier: number, airTime: number) => void) | null = null
   public onJump: (() => void) | null = null
   public onIndividualFlip: ((flipCount: number) => void) | null = null
+  public onFlipStart: (() => void) | null = null // Called when flip input begins
 
   // Snow trail particle system
   private snowParticles: Phaser.GameObjects.Particles.ParticleEmitter | null = null
@@ -324,14 +325,19 @@ export class Motorcycle extends Phaser.GameObjects.Container {
       }
     }
     
-    // Handle continuous flipping only when truly airborne
-    if (this.isTrulyAirborne()) {
+    // Handle continuous flipping when truly airborne OR grinding rails
+    if (this.isTrulyAirborne() || this.isGrinding) {
       if (isPressed) {
         if (!this.isFlipping) {
           // Start flipping - change to flipping image and adjust position/scale
           (this.riderSprite as any).setTexture('player_flipping');
           this.riderSprite.setPosition(0, 120); // Move down closer to ground (adjusted for larger sprite)
           this.riderSprite.setScale(0.35); // Proportionally larger scale for flipping image
+          
+          // Notify that flip action started (resets timer)
+          if (this.onFlipStart) {
+            this.onFlipStart()
+          }
         }
         this.isFlipping = true
         this.isAutoCorreting = false

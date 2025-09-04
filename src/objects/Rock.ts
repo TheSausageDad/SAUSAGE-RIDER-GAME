@@ -21,7 +21,7 @@ export class Rock extends Phaser.GameObjects.Container implements Poolable {
 
   private createSprite(): void {
     // Use your custom rock image
-    this.rockSprite = this.scene.add.image(0, 30, 'rock') // Push down 30px to sit properly on terrain
+    this.rockSprite = this.scene.add.image(0, 15, 'rock') // Push down 15px to sit on terrain surface
     this.rockSprite.setOrigin(0.5, 1.0) // Center horizontally, bottom at ground level
     this.rockSprite.setScale(0.0792) // 25% smaller than 0.1056 (0.1056 * 0.75)
     this.add(this.rockSprite)
@@ -33,6 +33,10 @@ export class Rock extends Phaser.GameObjects.Container implements Poolable {
     // Create physics body for collision detection - scaled to match visual size
     const rockWidth = 25  // Smaller collision box for easier jumping
     const rockHeight = 20 // Smaller collision box for easier jumping
+    
+    // Calculate physics body position to align with visual sprite
+    // Visual sprite is at (0, 15) relative to container, so physics should match
+    const physicsOffsetY = 15 - rockHeight/2 // Align physics body center with visual bottom
     
     // Create rectangular collision body
     this.scene.matter.add.gameObject(this, {
@@ -46,12 +50,12 @@ export class Rock extends Phaser.GameObjects.Container implements Poolable {
       }
     })
     
-    // Position the physics body correctly - adjusted to sit on terrain
+    // Position the physics body to match visual sprite exactly
     if (this.body) {
-      this.scene.matter.body.setPosition(this.body, { x: this.x, y: this.y + 25 - rockHeight/2 })
+      this.scene.matter.body.setPosition(this.body, { x: this.x, y: this.y + physicsOffsetY })
     }
     
-    console.log(`Setup rock physics body at (${this.x}, ${this.y})`)
+    console.log(`Setup rock physics body at (${this.x}, ${this.y + physicsOffsetY}) to align with visual sprite`)
   }
 
   public reset(x: number, y: number): void {
@@ -60,12 +64,15 @@ export class Rock extends Phaser.GameObjects.Container implements Poolable {
     this.setVisible(true)
     this.setActive(true)
     
-    // Update physics body position
+    // Update physics body position using same calculation as setupPhysics
+    const rockHeight = 20
+    const physicsOffsetY = 15 - rockHeight/2 // Match setupPhysics calculation
+    
     if (this.body) {
-      this.scene.matter.body.setPosition(this.body, { x, y: y - 15 })
+      this.scene.matter.body.setPosition(this.body, { x, y: y + physicsOffsetY })
     }
     
-    console.log(`Reset rock to (${x}, ${y})`)
+    console.log(`Reset rock to (${x}, ${y}) with physics at (${x}, ${y + physicsOffsetY})`)
   }
 
   public deactivate(): void {
