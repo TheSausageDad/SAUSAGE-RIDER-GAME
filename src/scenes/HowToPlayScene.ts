@@ -51,9 +51,9 @@ export class HowToPlayScene extends Phaser.Scene {
       strokeThickness: 3
     }).setOrigin(0.5)
 
-    // Create styled control box
-    const boxWidth = 320
-    const boxHeight = 280
+    // Create styled control box (expanded for wiener meter section)
+    const boxWidth = 340
+    const boxHeight = 480
     const boxX = GameSettings.canvas.width / 2
     const boxY = GameSettings.canvas.height / 2
 
@@ -79,7 +79,7 @@ export class HowToPlayScene extends Phaser.Scene {
     }).setOrigin(0.5)
 
     // Show both desktop and mobile controls
-    const controlY = boxY - 60
+    const controlY = boxY - 140
 
     // Desktop controls section (top)
     this.add.text(boxX, controlY, 'DESKTOP', {
@@ -129,6 +129,51 @@ export class HowToPlayScene extends Phaser.Scene {
     
     this.add.text(boxX, separatorY + 75, 'Tap and hold to flip', {
       fontSize: '12px',
+      color: '#FFFFFF',
+      fontFamily: '"Press Start 2P", monospace',
+      stroke: '#000000',
+      strokeThickness: 2
+    }).setOrigin(0.5)
+
+    // Second separator line for Wiener Meter section
+    const separator2Y = separatorY + 105
+    this.add.rectangle(boxX, separator2Y, boxWidth - 40, 2, 0x87CEEB, 0.8)
+
+    // WIENER METER section
+    this.add.text(boxX, separator2Y + 25, 'WIENER METER', {
+      fontSize: '16px',
+      color: '#FFD700',
+      fontFamily: '"Press Start 2P", monospace',
+      stroke: '#000000',
+      strokeThickness: 2
+    }).setOrigin(0.5)
+
+    this.add.text(boxX, separator2Y + 55, "Don't let the wiener reach", {
+      fontSize: '11px',
+      color: '#FFFFFF',
+      fontFamily: '"Press Start 2P", monospace',
+      stroke: '#000000',
+      strokeThickness: 2
+    }).setOrigin(0.5)
+    
+    this.add.text(boxX, separator2Y + 75, 'the end of the meter!', {
+      fontSize: '11px',
+      color: '#FFFFFF',
+      fontFamily: '"Press Start 2P", monospace',
+      stroke: '#000000',
+      strokeThickness: 2
+    }).setOrigin(0.5)
+
+    this.add.text(boxX, separator2Y + 95, 'Do a flip to keep that', {
+      fontSize: '11px',
+      color: '#FFFFFF',
+      fontFamily: '"Press Start 2P", monospace',
+      stroke: '#000000',
+      strokeThickness: 2
+    }).setOrigin(0.5)
+    
+    this.add.text(boxX, separator2Y + 115, 'sausage nice and small.', {
+      fontSize: '11px',
       color: '#FFFFFF',
       fontFamily: '"Press Start 2P", monospace',
       stroke: '#000000',
