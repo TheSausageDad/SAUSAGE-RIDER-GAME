@@ -2,6 +2,7 @@ import { Token } from "../objects/Token"
 import { Spike } from "../objects/Spike"
 import { MovingPlatform } from "../objects/MovingPlatform"
 import { Rail } from "../objects/Rail"
+import { Rock } from "../objects/Rock"
 
 export interface Poolable {
   reset(x: number, y: number, ...args: any[]): void
@@ -88,6 +89,7 @@ export class GameObjectPools {
   public spikePool: ObjectPool<Spike>
   public platformPool: ObjectPool<MovingPlatform>
   public railPool: ObjectPool<Rail>
+  public rockPool: ObjectPool<Rock>
 
   constructor(scene: Phaser.Scene) {
     this.tokenPool = new ObjectPool(scene, (s, x, y) => new Token(s, x, y), 20)
@@ -95,6 +97,7 @@ export class GameObjectPools {
     this.platformPool = new ObjectPool(scene, (s, x, y, w, h, sx, sy, ex, ey) => 
       new MovingPlatform(s, x, y, w, h, sx, sy, ex, ey), 5)
     this.railPool = new ObjectPool(scene, (s, x, y) => new Rail(s, x, y), 3)
+    this.rockPool = new ObjectPool(scene, (s, x, y) => new Rock(s, x, y), 5)
   }
 
   public releaseAll(): void {
@@ -102,6 +105,7 @@ export class GameObjectPools {
     this.spikePool.releaseAll()
     this.platformPool.releaseAll()
     this.railPool.releaseAll()
+    this.rockPool.releaseAll()
   }
 
   public getStats(): { [key: string]: { active: number, pooled: number } } {
@@ -109,7 +113,8 @@ export class GameObjectPools {
       tokens: { active: this.tokenPool.getActiveCount(), pooled: this.tokenPool.getPoolSize() },
       spikes: { active: this.spikePool.getActiveCount(), pooled: this.spikePool.getPoolSize() },
       platforms: { active: this.platformPool.getActiveCount(), pooled: this.platformPool.getPoolSize() },
-      rails: { active: this.railPool.getActiveCount(), pooled: this.railPool.getPoolSize() }
+      rails: { active: this.railPool.getActiveCount(), pooled: this.railPool.getPoolSize() },
+      rocks: { active: this.rockPool.getActiveCount(), pooled: this.rockPool.getPoolSize() }
     }
   }
 }

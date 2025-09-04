@@ -3,6 +3,7 @@ import { Token } from "../objects/Token"
 import { Spike } from "../objects/Spike"
 import { MovingPlatform } from "../objects/MovingPlatform"
 import { Rail } from "../objects/Rail"
+import { Rock } from "../objects/Rock"
 import { GameObjectPools } from "./ObjectPool"
 
 export interface LevelChunk {
@@ -14,6 +15,7 @@ export interface LevelChunk {
   spikes: Spike[]
   platforms: MovingPlatform[]
   rails: Rail[]
+  rocks: Rock[]
   terrainPath: { x: number, y: number }[] // Store terrain points for smooth physics
 }
 
@@ -30,6 +32,7 @@ export class LevelGenerator {
   private currentTerrainType: string | null = null
   private previousTerrainType: string | null = null // Track previous terrain to avoid rail clustering
   private railCooldown: number = 0 // Prevent multiple rail chunks in succession
+  private rockCooldown: number = 0 // Prevent multiple rock spawns in succession
   private terrainProgress: number = 0
   private terrainLength: number = 0
   private targetHeight: number = GameSettings.level.groundY
@@ -77,6 +80,7 @@ export class LevelGenerator {
       spikes: [],
       platforms: [],
       rails: [],
+      rocks: [],
       terrainPath: []
     }
 
@@ -473,6 +477,9 @@ export class LevelGenerator {
     this.lastChunkEndAngle = 0
     
     this.createSmoothTerrain(chunk, pathPoints, x, width, 'mini_slopes')
+    
+    // Add rock obstacles to flat terrain (15% chance)
+    this.addRocksToFlat(chunk)
   }
 
   private createRailFlat(chunk: LevelChunk, x: number, width: number, progress: number): void {
@@ -1252,6 +1259,9 @@ export class LevelGenerator {
         chunk.rails.forEach(rail => {
           try { this.objectPools.railPool.release(rail) } catch (error) { console.error("Rail release error:", error) }
         })
+        chunk.rocks.forEach(rock => {
+          try { this.objectPools.rockPool.release(rock) } catch (error) { console.error("Rock release error:", error) }
+        })
         return false
       }
       return true
@@ -1281,6 +1291,41 @@ export class LevelGenerator {
         chunk.tokens.splice(index, 1)
       }
     })
+  }
+
+  private addRocksToFlat(chunk: LevelChunk): void {
+    // Check rock cooldown first (5 second spacing at ~400px/s = ~2000px = ~7 chunks)
+    if (this.rockCooldown > 0) {
+      this.rockCooldown-- // Decrement cooldown
+      return // Still in cooldown
+    }
+
+    // 80% chance to spawn a rock on flat terrain (for testing)
+    if (Math.random() > 0.8) {
+      return // No rock this time
+    }
+
+    if (!chunk.terrainPath || chunk.terrainPath.length < 2) {
+      return // No terrain path to place rock on
+    }
+
+    // Find a good position for the rock (center area of chunk)
+    const startIndex = Math.floor(chunk.terrainPath.length * 0.3)
+    const endIndex = Math.floor(chunk.terrainPath.length * 0.7)
+    const rockIndex = startIndex + Math.floor(Math.random() * (endIndex - startIndex))
+    const rockPosition = chunk.terrainPath[rockIndex]
+
+    // Place rock on the ground surface
+    const rockX = rockPosition.x
+    const rockY = rockPosition.y // Rock sits on terrain surface
+
+    const rock = this.objectPools.rockPool.get(rockX, rockY)
+    chunk.rocks.push(rock)
+
+    // Set cooldown to prevent next rock for ~5 seconds (7 chunks at 300px each)
+    this.rockCooldown = 7
+
+    console.log(`🪨 Rock spawned at (${rockX.toFixed(0)}, ${rockY.toFixed(0)}) on flat terrain - cooldown set to 7 chunks`)
   }
 
   private guaranteeRailSpawn(chunk: LevelChunk): void {
@@ -1346,6 +1391,14 @@ export class LevelGenerator {
       rails.push(...chunk.rails)
     })
     return rails
+  }
+
+  public getRocks(): Rock[] {
+    const rocks: Rock[] = []
+    this.chunks.forEach(chunk => {
+      rocks.push(...chunk.rocks)
+    })
+    return rocks
   }
 
   public getChunks(): LevelChunk[] {
@@ -1478,6 +1531,9 @@ export class LevelGenerator {
       })
       chunk.rails.forEach(rail => {
         try { this.objectPools.railPool.release(rail) } catch (error) { console.error("Rail release error in main destroy:", error) }
+      })
+      chunk.rocks.forEach(rock => {
+        try { this.objectPools.rockPool.release(rock) } catch (error) { console.error("Rock release error in main destroy:", error) }
       })
     })
     this.chunks = []

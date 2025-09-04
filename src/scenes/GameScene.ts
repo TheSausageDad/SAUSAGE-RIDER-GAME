@@ -6,6 +6,7 @@ import { InputManager } from "../systems/InputManager"
 import { ScoreManager } from "../systems/ScoreManager"
 import { GameObjectPools } from "../systems/ObjectPool"
 import { AudioManager } from "../systems/AudioManager"
+import { RockWarningSystem } from "../systems/RockWarningSystem"
 import { triggerGameOver } from "../utils/RemixUtils"
 
 export class GameScene extends Phaser.Scene {
@@ -16,6 +17,7 @@ export class GameScene extends Phaser.Scene {
   private scoreManager!: ScoreManager
   private objectPools!: GameObjectPools
   private audioManager!: AudioManager
+  private rockWarningSystem!: RockWarningSystem
   
   private camera!: Phaser.Cameras.Scene2D.Camera
   private gameState: 'playing' | 'gameOver' = 'playing'
@@ -36,6 +38,9 @@ export class GameScene extends Phaser.Scene {
     // Load player images
     this.load.image('player', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Riding%20image-hkOurseDcYE6YvgDWvYoQ16cgzxM01.png?j9V4')
     this.load.image('player_flipping', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Flipping-yCElSe7lSawCKvFuduGGAf9HmQ0O17.png?Ncwo')
+    
+    // Load rock image
+    this.load.image('rock', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Rock-apKSB0qq36up3ubDji8h7OZalThazB.png?dNY4')
     
     // Load mountain background images for parallax - using online URLs
     this.load.image('low-mountainscape', 'https://lqy3lriiybxcejon.public.blob.vercel-storage.com/752a332a-597e-4762-8de5-b4398ff8f7d4/Higher%20mouintan%20scape-PvVImg9WQmSVri4OwNfJc6m4GjvVi2.png?VZGv')
@@ -514,6 +519,9 @@ export class GameScene extends Phaser.Scene {
     
     // Score manager
     this.scoreManager = new ScoreManager(this)
+
+    // Rock warning system
+    this.rockWarningSystem = new RockWarningSystem(this)
     
     // Setup collision detection for tokens
     this.setupCollisions()
@@ -695,6 +703,10 @@ export class GameScene extends Phaser.Scene {
       
       // Manual rail collision check
       this.checkRailCollisions()
+
+      // Check rock collisions and update warning system
+      this.checkRockCollisions()
+      this.updateRockWarnings()
       
       this.scoreManager.update()
     }
@@ -868,6 +880,56 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private checkRockCollisions(): void {
+    const motorcycleX = this.motorcycle.x
+    const motorcycleY = this.motorcycle.y
+    const collisionRadius = 30 // Smaller than token collection for precise collision
+    const collisionRadiusSquared = collisionRadius * collisionRadius
+    
+    // Only check rocks that are roughly on screen
+    const cameraLeft = this.camera.scrollX - 100
+    const cameraRight = this.camera.scrollX + this.camera.width + 100
+    
+    // Get all rocks from level generator
+    const rocks = this.levelGenerator.getRocks()
+    
+    for (let i = 0; i < rocks.length; i++) {
+      const rock = rocks[i]
+      
+      // Skip if not active or not visible
+      if (!rock.isActive || rock.x < cameraLeft || rock.x > cameraRight) {
+        continue
+      }
+      
+      // Quick distance check using squared distance (faster than sqrt)
+      const dx = rock.x - motorcycleX
+      const dy = rock.y - motorcycleY
+      const distanceSquared = dx * dx + dy * dy
+      
+      if (distanceSquared <= collisionRadiusSquared) {
+        console.log("💀 ROCK COLLISION! Game Over!")
+        
+        // Trigger crash callback on motorcycle which will call game over
+        if (this.motorcycle.onCrash) {
+          this.motorcycle.onCrash()
+        } else {
+          // Fallback if callback not set
+          this.gameOver()
+        }
+        
+        return // Exit immediately after collision
+      }
+    }
+  }
+
+  private updateRockWarnings(): void {
+    // Update rock warning system with current player state and upcoming rocks
+    const motorcycleVelocity = this.motorcycle.getVelocity().x
+    const rocks = this.levelGenerator.getRocks()
+    
+    this.rockWarningSystem.update(this.motorcycle.x, motorcycleVelocity, rocks)
+  }
+
 
   // --- Scene Shutdown Logic ---
   shutdown(): void {
@@ -885,6 +947,9 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.levelGenerator) {
       this.levelGenerator.destroy()
+    }
+    if (this.rockWarningSystem) {
+      this.rockWarningSystem.destroy()
     }
     
     // Clean up parallax layers and grass
